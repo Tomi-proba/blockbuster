@@ -75,6 +75,17 @@
   .tcard .status { font-size: 11px; color: #7a8299; }
   .stat-row { display: flex; justify-content: space-between; width: 100%; max-width: 360px; padding: 5px 0; border-bottom: 1px solid #1d2333; font-size: 14px; }
   .stat-row b { color: #ffd54f; }
+  .lb-row { display: grid; grid-template-columns: 34px 1fr auto auto; gap: 8px; width: 100%; max-width: 380px; padding: 5px 6px; border-bottom: 1px solid #1d2333; font-size: 14px; text-align: left; }
+  .lb-row.me { background: #1c2233; color: #ffd54f; }
+  .lb-row .rank { color: #7a8299; }
+  .lb-row .lvl { color: #ffd54f; font-weight: bold; }
+  .lb-row .pp { font-size: 12px; }
+  .name-form { display: flex; gap: 6px; width: 100%; max-width: 360px; }
+  .name-form input {
+    flex: 1; min-width: 0; font-family: inherit; font-size: 15px; padding: 7px 9px;
+    background: #0d1018; color: #e8eaf2; border: 2px solid #3d4a6b;
+  }
+  .name-form input:focus { outline: none; border-color: #ffd54f; }
   #toast {
     position: absolute; left: 50%; top: 52px; transform: translateX(-50%);
     background: #1c2233; border: 2px solid #ffd54f; color: #ffd54f;
@@ -91,7 +102,7 @@
   <!-- FŐMENÜ -->
   <div id="screen-menu" class="screen">
     <h1>BLOCK<br>BLASTER</h1>
-    <p class="muted">prototípus v0.3.1</p>
+    <p class="muted">prototípus v0.4</p>
     <p>Pénz: <span class="money" data-bind="money"></span> · Prestige pont: <span class="pp" data-bind="pp"></span></p>
     <p class="muted">Legjobb szint: <span data-bind="best"></span></p>
     <button data-action="play" id="btn-play">Játék</button>
@@ -102,8 +113,9 @@
       <button data-action="prestige">Prestige</button>
       <button data-action="achievements">Achievementek</button>
       <button data-action="stats">Statisztika</button>
-      <button data-action="reset" class="danger">Mentés törlése</button>
+      <button data-action="leaderboard">Ranglista</button>
     </div>
+    <button data-action="reset" class="danger small">Mentés törlése</button>
     <p class="muted" style="margin-top:10px">
       Mozgás: nyilak / WASD vagy egér · Szünet: Esc / P<br>
       Szedd fel a színes köröket (power-up)!
@@ -159,6 +171,20 @@
     <button data-action="menu" style="margin-top:14px">Vissza</button>
   </div>
 
+  <!-- RANGLISTA -->
+  <div id="screen-leaderboard" class="screen top hidden">
+    <h2>RANGLISTA</h2>
+    <p class="muted">Játékosonként a legjobb elért szint</p>
+    <div class="name-form">
+      <input id="lb-name-menu" type="text" maxlength="16" placeholder="A neved" autocomplete="off">
+      <button class="small" data-action="saveName">Mentés</button>
+    </div>
+    <p class="muted" id="lb-name-status"></p>
+    <div id="lb-list" style="width:100%;display:flex;flex-direction:column;align-items:center"></div>
+    <button data-action="leaderboard" class="small">Frissítés</button>
+    <button data-action="menu" style="margin-top:10px">Vissza</button>
+  </div>
+
   <!-- SZÜNET -->
   <div id="screen-pause" class="screen hidden">
     <h2>SZÜNET</h2>
@@ -173,6 +199,11 @@
     <p>Szerzett pénz: <span class="money" data-bind="runMoney"></span></p>
     <p>Összes pénz: <span class="money" data-bind="money"></span></p>
     <p class="muted">Legjobb szint: <span data-bind="best"></span></p>
+    <div class="name-form" id="go-name-form">
+      <input id="lb-name-over" type="text" maxlength="16" placeholder="A neved a ranglistára" autocomplete="off">
+      <button class="small" data-action="submitScore">Beküldés</button>
+    </div>
+    <p class="muted" id="go-lb-status"></p>
     <button data-action="play" id="btn-retry">Újra</button>
     <button data-action="shop">Shop</button>
     <button data-action="menu">Főmenü</button>
@@ -416,6 +447,15 @@ const CONFIG = {
     moneyPerHp: 0.5,
   },
 
+  // Online ranglista (külön Supabase-projekt; a publishable kulcs nyilvános, csak olvasni és beküldeni enged)
+  leaderboard: {
+    url: 'https://kjmrwchogznwfhjypcon.supabase.co',
+    key: 'sb_publishable_mfR9WoTDpVgrix2sRLV6dQ_GGPuLv9c',
+    top: 20,               // ennyi sort mutat
+    minLevel: 2,           // ennél alacsonyabb eredményt nem küld be
+    timeoutMs: 8000,
+  },
+
   // Prestige
   prestige: {
     minLevel: 25,                                            // ettől a szinttől lehet prestige-elni
@@ -476,6 +516,8 @@ const Save = {
       prestige: { points: 0, total: 0, count: 0, upgrades: zeroLevels(CONFIG.prestige.upgrades) },
       stats: { kills: 0, bossKills: 0, moneyEarned: 0, powerups: 0, runs: 0 },
       achievements: {},
+      playerName: '',        // név a ranglistán
+      submittedBest: 0,      // a legjobb már beküldött szint ezzel a névvel
     };
   },
 
@@ -507,6 +549,8 @@ const Save = {
     }
     if (raw.stats) for (const k of Object.keys(d.stats)) d.stats[k] = num(raw.stats[k]);
     if (raw.achievements) for (const a of CONFIG.achievements) if (raw.achievements[a.id]) d.achievements[a.id] = true;
+    if (typeof raw.playerName === 'string') d.playerName = cleanName(raw.playerName);
+    d.submittedBest = num(raw.submittedBest);
 
     this.data = d;
   },
@@ -1139,6 +1183,7 @@ function gameOver() {
   Save.write();
   setState('over');
   document.getElementById('btn-retry').textContent = `Újra (${continueLevel()}. szinttől)`;
+  submitRunScore();
 }
 
 /* =====================================================================
@@ -1515,6 +1560,105 @@ function nextToast() {
 }
 
 /* =====================================================================
+ * ONLINE RANGLISTA (Supabase REST, külső könyvtár nélkül)
+ * ===================================================================== */
+function cleanName(name) {
+  return String(name).replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 16);
+}
+
+async function lbRequest(path, options = {}) {
+  const LB = CONFIG.leaderboard;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), LB.timeoutMs);
+  try {
+    const res = await fetch(`${LB.url}/rest/v1/${path}`, {
+      ...options,
+      signal: ctrl.signal,
+      headers: { apikey: LB.key, 'Content-Type': 'application/json', ...(options.headers || {}) },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.status === 204 || res.status === 201 ? null : res.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function fetchLeaderboard() {
+  return lbRequest(`leaderboard?select=name,level,prestiges&order=level.desc,created_at.asc&limit=${CONFIG.leaderboard.top}`);
+}
+
+function submitScore(name, level) {
+  return lbRequest('scores', {
+    method: 'POST',
+    headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({ name, level, prestiges: Save.data.prestige.count }),
+  });
+}
+
+// Game Over után: ha van név és új saját rekord, automatikusan beküldi
+async function submitRunScore() {
+  const status = document.getElementById('go-lb-status');
+  const name = Save.data.playerName;
+  const level = game.level;
+  document.getElementById('lb-name-over').value = name;
+  if (level < CONFIG.leaderboard.minLevel) { status.textContent = ''; return; }
+  if (!name) { status.textContent = 'Adj meg egy nevet, és felkerülsz a ranglistára!'; return; }
+  if (level <= Save.data.submittedBest) {
+    status.textContent = `Ranglistán: ${name} · ${Save.data.submittedBest}. szint (nem ez a rekordod)`;
+    return;
+  }
+  status.textContent = 'Beküldés...';
+  try {
+    await submitScore(name, level);
+    Save.data.submittedBest = level;
+    Save.write();
+    status.textContent = `Felkerült a ranglistára: ${name} · ${level}. szint ✓`;
+  } catch (e) {
+    status.textContent = 'Nem sikerült beküldeni (nincs kapcsolat a ranglistával).';
+  }
+}
+
+function setPlayerName(raw) {
+  const name = cleanName(raw);
+  if (!name) return false;
+  if (name !== Save.data.playerName) {
+    Save.data.playerName = name;
+    Save.data.submittedBest = 0;    // új névvel újra be lehet küldeni a rekordot
+    Save.write();
+  }
+  return true;
+}
+
+async function renderLeaderboard() {
+  document.getElementById('lb-name-menu').value = Save.data.playerName;
+  document.getElementById('lb-name-status').textContent = Save.data.playerName
+    ? 'A Game Over után automatikusan beküldjük az új rekordodat.'
+    : 'Adj meg egy nevet, hogy felkerülj a ranglistára.';
+  const list = document.getElementById('lb-list');
+  list.textContent = 'Betöltés...';
+  try {
+    const rows = await fetchLeaderboard();
+    if (game.state !== 'leaderboard') return;
+    list.innerHTML = '';
+    if (!rows.length) { list.textContent = 'Még senki nincs a ranglistán. Légy te az első!'; return; }
+    rows.forEach((r, i) => {
+      const row = document.createElement('div');
+      row.className = 'lb-row' + (r.name.toLowerCase() === Save.data.playerName.toLowerCase() ? ' me' : '');
+      const cells = [`${i + 1}.`, r.name, `${r.level}. szint`, r.prestiges ? `P${r.prestiges}` : ''];
+      ['rank', 'nm', 'lvl', 'pp'].forEach((cls, j) => {
+        const c = document.createElement('span');
+        c.className = cls;
+        c.textContent = cells[j];          // a nevek felhasználói adatok: csak szövegként
+        row.appendChild(c);
+      });
+      list.appendChild(row);
+    });
+  } catch (e) {
+    list.textContent = 'A ranglista most nem érhető el (nincs internet, vagy ez az oldal nem engedi a kapcsolatot).';
+  }
+}
+
+/* =====================================================================
  * UI (DOM képernyők)
  * ===================================================================== */
 const screens = {
@@ -1524,6 +1668,7 @@ const screens = {
   prestige: document.getElementById('screen-prestige'),
   achievements: document.getElementById('screen-achievements'),
   stats: document.getElementById('screen-stats'),
+  leaderboard: document.getElementById('screen-leaderboard'),
   paused: document.getElementById('screen-pause'),
   over: document.getElementById('screen-gameover'),
 };
@@ -1534,6 +1679,7 @@ const RENDERERS = {
   prestige: renderPrestige,
   achievements: renderAchievements,
   stats: renderStats,
+  leaderboard: renderLeaderboard,
 };
 
 function setState(state) {
@@ -1843,6 +1989,18 @@ const actions = {
   resume: () => setState('playing'),
   quit: () => { Save.write(); game.player = null; setState('menu'); },
   doPrestige,
+  leaderboard: () => setState('leaderboard'),
+  saveName: () => {
+    const ok = setPlayerName(document.getElementById('lb-name-menu').value);
+    document.getElementById('lb-name-status').textContent = ok ? `Név elmentve: ${Save.data.playerName}` : 'Adj meg egy nevet (1–16 karakter).';
+  },
+  submitScore: () => {
+    if (!setPlayerName(document.getElementById('lb-name-over').value)) {
+      document.getElementById('go-lb-status').textContent = 'Adj meg egy nevet (1–16 karakter).';
+      return;
+    }
+    submitRunScore();
+  },
   // Kétlépéses törlés
   reset: () => {
     const btn = document.querySelector('[data-action="reset"]');
@@ -1869,7 +2027,11 @@ document.querySelectorAll('[data-action]').forEach((el) => {
  * ===================================================================== */
 const GAME_KEYS = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'KeyA', 'KeyD', 'KeyW', 'KeyS', 'Space'];
 
+document.getElementById('lb-name-menu').addEventListener('keydown', (e) => { if (e.key === 'Enter') actions.saveName(); });
+document.getElementById('lb-name-over').addEventListener('keydown', (e) => { if (e.key === 'Enter') actions.submitScore(); });
+
 window.addEventListener('keydown', (e) => {
+  if (e.target instanceof HTMLInputElement) return;
   if (e.code === 'Escape' || e.code === 'KeyP') {
     if (game.state === 'playing') { Save.write(); setState('paused'); }
     else if (game.state === 'paused') setState('playing');
