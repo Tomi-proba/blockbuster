@@ -156,7 +156,7 @@ const CONFIG = {
     startLives: 3,
   },
 
-  bullet: { speed: 1440 },   // alap lövedéksebesség (px/s), ha a turret nem ad meg sajátot
+  bullet: { speed: 1000 },   // alap lövedéksebesség (px/s), ha a turret nem ad meg sajátot
 
   // Turretek.
   //  kind: 'projectile' (lövedék) vagy 'laser' (folyamatos sugár, damage = sebzés/mp)
@@ -185,7 +185,7 @@ const CONFIG = {
     heavy: {
       name: 'Heavy', price: 1500, unlockLevel: 6, color: '#ff8a65', kind: 'projectile',
       damage: 12, fireRate: 1.8, bullets: 1, spreadStep: 0, parallelGap: 22, bulletRadius: 9,
-      bulletSpeed: 1120, pierce: 1,
+      bulletSpeed: 780, pierce: 1,
       barrels: [{ angle: 0, width: 22, length: 24 }],
       description: 'Lassú, nagy sebzés, átüt egy blokkon.',
     },
