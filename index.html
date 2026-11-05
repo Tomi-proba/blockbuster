@@ -77,7 +77,7 @@
   <!-- FŐMENÜ -->
   <div id="screen-menu" class="screen">
     <h1>BLOCK<br>BLASTER</h1>
-    <p class="muted">prototípus v0.2</p>
+    <p class="muted">prototípus v0.2.1</p>
     <p>Pénz: <span class="money" data-bind="money"></span></p>
     <p class="muted">Legjobb szint: <span data-bind="best"></span></p>
     <button data-action="play">Játék</button>
@@ -150,13 +150,13 @@ const CONFIG = {
 
   player: {
     height: 56,        // a szélessége = 1 blokk
-    speed: 420,        // px/s billentyűvel
-    mouseSpeed: 1000,  // px/s ennyivel követi a kurzort
+    speed: 630,        // px/s billentyűvel
+    mouseSpeed: Infinity, // px/s ennyivel követi a kurzort (Infinity = azonnal)
     zoneTop: 0.64,     // a mozgási zóna teteje (a pálya magasságának aránya)
     startLives: 3,
   },
 
-  bullet: { speed: 720 },
+  bullet: { speed: 1440 },   // alap lövedéksebesség (px/s), ha a turret nem ad meg sajátot
 
   // Turretek.
   //  kind: 'projectile' (lövedék) vagy 'laser' (folyamatos sugár, damage = sebzés/mp)
@@ -166,32 +166,32 @@ const CONFIG = {
   turrets: {
     basic: {
       name: 'Basic', price: 0, unlockLevel: 0, color: '#4fc3f7', kind: 'projectile',
-      damage: 2, fireRate: 4, bullets: 1, spreadStep: 0, parallelGap: 14, bulletRadius: 5,
+      damage: 2, fireRate: 6, bullets: 1, spreadStep: 0, parallelGap: 14, bulletRadius: 5,
       barrels: [{ angle: 0, width: 12, length: 26 }],
       description: 'Kiegyensúlyozott alap turret.',
     },
     rapid: {
       name: 'Rapid', price: 250, unlockLevel: 0, color: '#ffd54f', kind: 'projectile',
-      damage: 1, fireRate: 11, bullets: 1, spreadStep: 0, parallelGap: 12, bulletRadius: 4,
+      damage: 1, fireRate: 16, bullets: 1, spreadStep: 0, parallelGap: 12, bulletRadius: 4,
       barrels: [{ angle: 0, width: 7, length: 30, offsetX: -10 }, { angle: 0, width: 7, length: 30, offsetX: 10 }],
       description: 'Nagyon gyors, de gyenge lövések.',
     },
     spread: {
       name: 'Spread', price: 600, unlockLevel: 0, color: '#ce93d8', kind: 'projectile',
-      damage: 1.5, fireRate: 3, bullets: 3, spreadStep: 14, parallelGap: 0, bulletRadius: 5,
+      damage: 1.5, fireRate: 4.5, bullets: 3, spreadStep: 14, parallelGap: 0, bulletRadius: 5,
       barrels: [{ angle: -24, width: 10, length: 22 }, { angle: 0, width: 10, length: 26 }, { angle: 24, width: 10, length: 22 }],
       description: '3 lövedék legyezőben.',
     },
     heavy: {
       name: 'Heavy', price: 1500, unlockLevel: 6, color: '#ff8a65', kind: 'projectile',
-      damage: 12, fireRate: 1.2, bullets: 1, spreadStep: 0, parallelGap: 22, bulletRadius: 9,
-      bulletSpeed: 560, pierce: 1,
+      damage: 12, fireRate: 1.8, bullets: 1, spreadStep: 0, parallelGap: 22, bulletRadius: 9,
+      bulletSpeed: 1120, pierce: 1,
       barrels: [{ angle: 0, width: 22, length: 24 }],
       description: 'Lassú, nagy sebzés, átüt egy blokkon.',
     },
     laser: {
       name: 'Laser', price: 3000, unlockLevel: 10, color: '#ff4081', kind: 'laser',
-      damage: 22, fireRate: 1, bullets: 1, spreadStep: 0, parallelGap: 18, beamWidth: 6,
+      damage: 33, fireRate: 1, bullets: 1, spreadStep: 0, parallelGap: 18, beamWidth: 6,
       barrels: [{ angle: 0, width: 10, length: 28, tip: '#ff4081' }],
       description: 'Folyamatos sugár, másodpercenként sebez.',
     },
@@ -217,7 +217,7 @@ const CONFIG = {
   powerups: {
     dropChance: 0.06,  // esély blokkonként
     duration: 8,       // másodperc
-    fallSpeed: 85,     // px/s
+    fallSpeed: 170,    // px/s
     radius: 15,
     types: {
       doubleDamage: { letter: 'D', name: 'Double Damage', color: '#ef5350', weight: 1, damageMult: 2 },
@@ -235,17 +235,23 @@ const CONFIG = {
 
   // Ereszkedési sebesség (px/s). Szintenként nő, és a szinten belül is gyorsul.
   speed: {
-    base: 48,          // 1. szint eleje
-    perLevel: 7,       // szintenként ennyivel gyorsabb
+    base: 96,          // 1. szint eleje
+    levelGrowth: 0.12, // szintenként +12% (szorzó)
     inLevelRamp: 0.4,  // a szint végére +40%
-    max: 170,          // ennél gyorsabb soha nem lesz
+    max: 192,          // ennél gyorsabb soha nem lesz (a régi 48-as alap 4-szerese)
+  },
+
+  // Időzítések (mp)
+  timing: {
+    levelStartDelay: 0.3,  // új szint elején ennyi szünet az első sorig
+    levelClearDelay: 0.8,  // a "szint teljesítve" felirat ideje a következő szintig
   },
 
   // Hullámok (blokksorok)
   waves: {
-    rows: (L) => 8 + L * 2,                                     // ennyi sor jön a szinten
-    spacing: (L) => Math.max(0, 90 - (L - 1) * 9),              // extra üres hely sorok közt (px)
-    inLevelSpacingCut: 0.5,                                     // a szint végére felére csökken
+    rows: (L) => 5 + L,                                         // ennyi sor jön a szinten
+    rowGap: 0,                                                  // extra üres hely sorok közt (px); 0 = az új sor azonnal jön, amint az előző egy blokknyit lejjebb ért
+    spawnWhenEmpty: true,                                       // ha a pálya kiürül, azonnal jön a következő sor
     blocksPerRow: (L) => [1 + Math.floor(L / 8), Math.min(5, 1 + Math.ceil(L / 3))],
     hpRange: (L) => [Math.ceil(L * 1.5), 4 + L * 5],
     clearBonus: (L) => 25 * L,
@@ -437,10 +443,10 @@ function startLevel(L) {
   game.wavesSpawned = 0;
   game.spawnDist = Infinity;   // az első sor azonnal jön a késleltetés után
   game.lastRowHeight = 0;
-  game.spawnDelay = 1.6;
+  game.spawnDelay = CONFIG.timing.levelStartDelay;
   game.fireTimer = 0;
   game.levelClearTimer = 0;
-  game.banner = { text: `SZINT ${L}`, sub: isBossLevel(L) ? 'BOSS SZINT!' : '', t: 1.6 };
+  game.banner = { text: `SZINT ${L}`, sub: isBossLevel(L) ? 'BOSS SZINT!' : '', t: 1.2 };
 }
 
 /* ---------- Tempó ---------- */
@@ -450,13 +456,8 @@ function levelProgress() {
 
 function currentFallSpeed() {
   const S = CONFIG.speed;
-  const base = S.base + S.perLevel * (game.level - 1);
+  const base = S.base * Math.pow(1 + S.levelGrowth, game.level - 1);
   return Math.min(S.max, base * (1 + S.inLevelRamp * levelProgress()));
-}
-
-function currentRowSpacing() {
-  const Wv = CONFIG.waves;
-  return Wv.spacing(game.level) * (1 - Wv.inLevelSpacingCut * levelProgress());
 }
 
 /* ---------- Spawnolás ---------- */
@@ -513,7 +514,9 @@ function updateSpawning(dt) {
   if (game.spawnDelay > 0) { game.spawnDelay -= dt; return; }
 
   const L = game.level;
-  if (game.wavesSpawned < totalWaves(L) && game.spawnDist >= game.lastRowHeight + currentRowSpacing()) {
+  const fieldEmpty = CONFIG.waves.spawnWhenEmpty && game.blocks.length === 0;
+  const prevRowClear = game.spawnDist >= game.lastRowHeight + CONFIG.waves.rowGap;
+  if (game.wavesSpawned < totalWaves(L) && (fieldEmpty || prevRowClear)) {
     if (game.wavesSpawned < CONFIG.waves.rows(L)) spawnRow();
     else spawnBoss();
   }
@@ -718,8 +721,8 @@ function update(dt) {
       addMoney(bonus);
       Save.data.bestLevel = Math.max(Save.data.bestLevel, L + 1);
       Save.write();
-      game.levelClearTimer = 1.5;
-      game.banner = { text: 'SZINT TELJESÍTVE', sub: `bónusz +$${bonus}`, t: 1.5 };
+      game.levelClearTimer = CONFIG.timing.levelClearDelay;
+      game.banner = { text: 'SZINT TELJESÍTVE', sub: `bónusz +$${bonus}`, t: CONFIG.timing.levelClearDelay };
     }
     game.levelClearTimer -= dt;
     if (game.levelClearTimer <= 0) startLevel(L + 1);
