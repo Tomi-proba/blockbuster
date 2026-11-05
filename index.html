@@ -91,11 +91,11 @@
   <!-- FŐMENÜ -->
   <div id="screen-menu" class="screen">
     <h1>BLOCK<br>BLASTER</h1>
-    <p class="muted">prototípus v0.3</p>
+    <p class="muted">prototípus v0.3.1</p>
     <p>Pénz: <span class="money" data-bind="money"></span> · Prestige pont: <span class="pp" data-bind="pp"></span></p>
     <p class="muted">Legjobb szint: <span data-bind="best"></span></p>
-    <button data-action="play">Játék</button>
-    <button data-action="playHigh" id="btn-play-high" class="hidden"></button>
+    <button data-action="play" id="btn-play">Játék</button>
+    <button data-action="playFromStart" id="btn-play-start" class="small hidden">Kezdés az 1. szintről</button>
     <div class="menu-grid">
       <button data-action="shop">Shop</button>
       <button data-action="collection">Collection</button>
@@ -127,7 +127,7 @@
   <!-- COLLECTION -->
   <div id="screen-collection" class="screen top hidden">
     <h2>COLLECTION</h2>
-    <p class="muted">Alap statisztikák, fejlesztések nélkül. Fő = fő ágyú, Bal/Jobb = segédágyú (40% sebzés).</p>
+    <p class="muted">Alap statisztikák, fejlesztések nélkül. Fő = fő ágyú, Bal/Jobb = segédágyú (csökkentett sebzés).</p>
     <div id="collection-grid" class="grid"></div>
     <button data-action="menu" style="margin-top:10px">Vissza</button>
   </div>
@@ -173,7 +173,7 @@
     <p>Szerzett pénz: <span class="money" data-bind="runMoney"></span></p>
     <p>Összes pénz: <span class="money" data-bind="money"></span></p>
     <p class="muted">Legjobb szint: <span data-bind="best"></span></p>
-    <button data-action="play">Újra</button>
+    <button data-action="play" id="btn-retry">Újra</button>
     <button data-action="shop">Shop</button>
     <button data-action="menu">Főmenü</button>
   </div>
@@ -222,74 +222,74 @@ const CONFIG = {
     },
     rapid: {
       name: 'Rapid', price: 250, unlockLevel: 0, color: '#ffd54f', kind: 'projectile',
-      damage: 1, fireRate: 16, bullets: 1, spreadStep: 0, parallelGap: 12, bulletRadius: 4,
+      damage: 1, fireRate: 12.5, bullets: 1, spreadStep: 0, parallelGap: 12, bulletRadius: 4,
       barrels: [{ angle: 0, width: 7, length: 30, offsetX: -10 }, { angle: 0, width: 7, length: 30, offsetX: 10 }],
       description: 'Nagyon gyors, de gyenge lövések.',
     },
     twin: {
       name: 'Twin', price: 500, unlockLevel: 2, color: '#81c784', kind: 'projectile',
-      damage: 1.6, fireRate: 5, bullets: 2, spreadStep: 0, parallelGap: 24, bulletRadius: 5,
+      damage: 1.9, fireRate: 5, bullets: 2, spreadStep: 0, parallelGap: 24, bulletRadius: 5,
       barrels: [{ angle: 0, width: 11, length: 26, offsetX: -12 }, { angle: 0, width: 11, length: 26, offsetX: 12 }],
       description: 'Két párhuzamos cső, két egyenes lövés.',
     },
     spread: {
       name: 'Spread', price: 800, unlockLevel: 3, color: '#ce93d8', kind: 'projectile',
-      damage: 1.5, fireRate: 4.5, bullets: 3, spreadStep: 14, parallelGap: 0, bulletRadius: 5,
+      damage: 1.85, fireRate: 4.5, bullets: 3, spreadStep: 14, parallelGap: 0, bulletRadius: 5,
       barrels: [{ angle: -24, width: 10, length: 22 }, { angle: 0, width: 10, length: 26 }, { angle: 24, width: 10, length: 22 }],
       description: '3 lövedék legyezőben.',
     },
     heavy: {
       name: 'Heavy', price: 1500, unlockLevel: 6, color: '#ff8a65', kind: 'projectile',
-      damage: 12, fireRate: 1.8, bullets: 1, spreadStep: 0, parallelGap: 22, bulletRadius: 9,
+      damage: 7.5, fireRate: 1.8, bullets: 1, spreadStep: 0, parallelGap: 22, bulletRadius: 9,
       bulletSpeed: 780, pierce: 1,
       barrels: [{ angle: 0, width: 22, length: 24 }],
       description: 'Lassú, nagy sebzés, átüt egy blokkon.',
     },
     laser: {
       name: 'Laser', price: 3000, unlockLevel: 10, color: '#ff4081', kind: 'laser',
-      damage: 33, fireRate: 1, bullets: 1, spreadStep: 0, parallelGap: 18, beamWidth: 6,
+      damage: 21, fireRate: 1, bullets: 1, spreadStep: 0, parallelGap: 18, beamWidth: 6,
       barrels: [{ angle: 0, width: 10, length: 28, tip: '#ff4081' }],
       description: 'Folyamatos sugár, másodpercenként sebez.',
     },
     sniper: {
       name: 'Sniper', price: 6000, unlockLevel: 13, color: '#b0bec5', kind: 'projectile',
-      damage: 90, fireRate: 0.5, bullets: 1, spreadStep: 0, parallelGap: 20, bulletRadius: 4,
+      damage: 70, fireRate: 1, bullets: 1, spreadStep: 0, parallelGap: 20, bulletRadius: 4,
       bulletSpeed: 1600, pierce: 999,
       barrels: [{ angle: 0, width: 6, length: 46, tip: '#ffffff' }],
       description: 'Nagyon lassú, óriási sebzés, minden blokkon átüt.',
     },
     bouncer: {
       name: 'Bouncer', price: 10000, unlockLevel: 16, color: '#4db6ac', kind: 'projectile',
-      damage: 6, fireRate: 3, bullets: 1, spreadStep: 0, parallelGap: 16, bulletRadius: 6,
+      damage: 2.4, fireRate: 3, bullets: 1, spreadStep: 0, parallelGap: 16, bulletRadius: 6,
       bounces: 3, bounceRange: 260,
       barrels: [{ angle: 0, width: 12, length: 20, cap: '#4db6ac' }],
       description: 'A lövedék blokkról blokkra pattan (max 3×).',
     },
     freeze: {
       name: 'Freeze', price: 16000, unlockLevel: 19, color: '#80deea', kind: 'projectile',
-      damage: 4, fireRate: 5, bullets: 1, spreadStep: 0, parallelGap: 16, bulletRadius: 5,
+      damage: 3.4, fireRate: 5, bullets: 1, spreadStep: 0, parallelGap: 16, bulletRadius: 5,
       freeze: { duration: 2, slow: 0.4 },   // 2 mp-ig 40%-os sebességgel ereszkedik
       barrels: [{ angle: -14, width: 7, length: 20, tip: '#e0f7fa' }, { angle: 14, width: 7, length: 20, tip: '#e0f7fa' }, { angle: 0, width: 9, length: 24, tip: '#e0f7fa' }],
       description: 'Kis sebzés, de 2 mp-re lelassítja a blokkot.',
     },
     chain: {
       name: 'Chain', price: 25000, unlockLevel: 22, color: '#9575cd', kind: 'projectile',
-      damage: 8, fireRate: 3, bullets: 1, spreadStep: 0, parallelGap: 16, bulletRadius: 5,
+      damage: 4.4, fireRate: 3, bullets: 1, spreadStep: 0, parallelGap: 16, bulletRadius: 5,
       chain: { jumps: 2, factor: 0.7, range: 220 },
       barrels: [{ angle: -12, width: 6, length: 28, tip: '#fff59d' }, { angle: 12, width: 6, length: 28, tip: '#fff59d' }],
       description: 'Villám: a találat a 2 legközelebbi blokkra ugrik.',
     },
     minigun: {
       name: 'Minigun', price: 40000, unlockLevel: 26, color: '#a1887f', kind: 'projectile',
-      damage: 1.4, fireRate: 8, bullets: 1, spreadStep: 0, parallelGap: 10, bulletRadius: 4,
+      damage: 1, fireRate: 8, bullets: 1, spreadStep: 0, parallelGap: 10, bulletRadius: 4,
       spinUp: { maxMult: 4, rampTime: 3 },  // folyamatos tüzeléssel 3 mp alatt 4× tűzgyorsaság
       barrels: [-9, -3, 3, 9].map((x) => ({ angle: 0, width: 4, length: 30, offsetX: x })),
       description: 'Minél tovább tüzel, annál gyorsabban lő.',
     },
     mortar: {
       name: 'Mortar', price: 65000, unlockLevel: 30, color: '#7986cb', kind: 'mortar',
-      damage: 30, fireRate: 0.8, bullets: 1, spreadStep: 0, parallelGap: 0, bulletRadius: 8,
-      mortar: { flightTime: 0.6, areaCells: 3, arcHeight: 140 },
+      damage: 15, fireRate: 1.6, bullets: 1, spreadStep: 0, parallelGap: 0, bulletRadius: 8,
+      mortar: { flightTime: 0.5, areaCells: 3, arcHeight: 140 },
       barrels: [{ angle: 0, width: 26, length: 16 }],
       description: 'Ívben lő, 3×3-as területet sebez.',
     },
@@ -298,12 +298,12 @@ const CONFIG = {
   // Fejlesztések (minden turretre): ár = baseCost * costGrowth ^ jelenlegi szint
   upgrades: {
     damage: {
-      name: 'Sebzés', maxLevel: 50, baseCost: 40, costGrowth: 1.3, perLevel: 0.25,
-      describe: (lvl) => `+${Math.round(lvl * 25)}% sebzés`,
+      name: 'Sebzés', maxLevel: 50, baseCost: 40, costGrowth: 1.3, perLevel: 0.15,
+      describe: (lvl) => `+${Math.round(lvl * CONFIG.upgrades.damage.perLevel * 100)}% sebzés`,
     },
     fireRate: {
-      name: 'Tűzgyorsaság', maxLevel: 50, baseCost: 50, costGrowth: 1.3, perLevel: 0.15,
-      describe: (lvl) => `+${Math.round(lvl * 15)}% lövés/mp (lézernél sebzés/mp)`,
+      name: 'Tűzgyorsaság', maxLevel: 50, baseCost: 50, costGrowth: 1.3, perLevel: 0.08,
+      describe: (lvl) => `+${Math.round(lvl * CONFIG.upgrades.fireRate.perLevel * 100)}% lövés/mp (lézernél sebzés/mp)`,
     },
     extraBullet: {
       name: '+1 lövedék', maxLevel: 10, baseCost: 300, costGrowth: 1.8, perLevel: 1,
@@ -314,27 +314,29 @@ const CONFIG = {
   // Segédágyúk (drónok): a fő turret két oldalán lebegnek
   drones: {
     maxSlots: 2,                 // 1. hely = bal, 2. hely = jobb
-    unlockLevel: 8,
-    slotPrices: [3000, 15000],
-    baseDamagePct: 0.4,          // a segédágyú a turret sebzésének 40%-ával lő
+    unlockLevel: 12,
+    slotPrices: [5000, 25000],
+    baseDamagePct: 0.25,         // a segédágyú a turret sebzésének 25%-ával lő
+    extraBullets: false,         // a +1 lövedék fejlesztés és a Multi Shot nem hat rájuk
     scale: 0.5,                  // fél blokk széles
     gap: 6,                      // távolság a fő turrettől (px)
     floatY: 10,                  // ennyivel lebeg a fő turret fölött (px)
     upgrades: {
       damage: {
-        name: 'Segédágyú sebzés', maxLevel: 50, baseCost: 200, costGrowth: 1.28, perLevel: 0.012,
-        describe: (lvl) => `${Math.round((CONFIG.drones.baseDamagePct + lvl * 0.012) * 100)}% sebzés`,
+        name: 'Segédágyú sebzés', maxLevel: 50, baseCost: 300, costGrowth: 1.3, perLevel: 0.007,
+        describe: (lvl) => `${Math.round((CONFIG.drones.baseDamagePct + lvl * CONFIG.drones.upgrades.damage.perLevel) * 100)}% sebzés`,
       },
       fireRate: {
-        name: 'Segédágyú tűzgyorsaság', maxLevel: 50, baseCost: 200, costGrowth: 1.28, perLevel: 0.04,
-        describe: (lvl) => `+${Math.round(lvl * 4)}% lövés/mp`,
+        name: 'Segédágyú tűzgyorsaság', maxLevel: 50, baseCost: 300, costGrowth: 1.3, perLevel: 0.02,
+        describe: (lvl) => `+${Math.round(lvl * CONFIG.drones.upgrades.fireRate.perLevel * 100)}% lövés/mp`,
       },
     },
   },
 
   // Power-upok
   powerups: {
-    dropChance: 0.06,  // esély blokkonként
+    dropChance: 0.03,  // esély blokkonként
+    dropCooldown: 6,   // legalább ennyi mp két drop között (a boss mindig dob)
     duration: 8,       // másodperc
     fallSpeed: 170,    // px/s
     radius: 15,
@@ -394,6 +396,11 @@ const CONFIG = {
     clearBonus: (L) => Math.round(25 * L * Math.pow(1.08, L - 1)),
   },
 
+  // Folytatás: a játék a legutóbb elért ellenőrzőponttól indul (1, 6, 11, 16, ...)
+  progress: {
+    checkpointEvery: 5,
+  },
+
   // Boss: minden N. szinten, a szint utolsó hullámaként
   boss: {
     everyNthLevel: 5,
@@ -420,9 +427,9 @@ const CONFIG = {
       money:       { name: 'Végleges pénz',    maxLevel: 50, costBase: 1, costStep: 1, perLevel: 0.10, describe: (l) => `+${l * 10}% pénz` },
       fireRate:    { name: 'Végleges tűzgyorsaság', maxLevel: 30, costBase: 1, costStep: 1, perLevel: 0.05, describe: (l) => `+${l * 5}% lövés/mp` },
       powerupTime: { name: 'Power-up idő',     maxLevel: 5,  costBase: 2, costStep: 2, perLevel: 1,    describe: (l) => `+${l} mp` },
-      dropChance:  { name: 'Power-up esély',   maxLevel: 10, costBase: 1, costStep: 1, perLevel: 0.01, describe: (l) => `+${l}%` },
+      dropChance:  { name: 'Power-up esély',   maxLevel: 10, costBase: 1, costStep: 1, perLevel: 0.005, describe: (l) => `+${l * 0.5}%` },
       extraLife:   { name: 'Extra élet',       maxLevel: 2,  costBase: 3, costStep: 3, perLevel: 1,    describe: (l) => `+${l} élet` },
-      startLevel:  { name: 'Kezdő szint',      maxLevel: 6,  costBase: 2, costStep: 2, perLevel: 5,    describe: (l) => (l ? `indulhatsz a ${1 + l * 5}. szintről` : 'nincs') },
+      startLevel:  { name: 'Kezdő szint',      maxLevel: 6,  costBase: 2, costStep: 2, perLevel: 5,    describe: (l) => (l ? `prestige után a ${1 + l * 5}. szintről indulsz` : 'nincs') },
     },
   },
 
@@ -660,6 +667,14 @@ function maxStartLevel() {
   return 1 + CONFIG.prestige.upgrades.startLevel.perLevel * Save.data.prestige.upgrades.startLevel;
 }
 
+// Innen folytatódik a játék: a prestige óta elért legjobb szint előtti ellenőrzőpont
+function continueLevel() {
+  const n = CONFIG.progress.checkpointEvery;
+  const best = Save.data.cycleBest;
+  const checkpoint = best > 1 ? Math.floor((best - 1) / n) * n + 1 : 1;
+  return Math.max(checkpoint, maxStartLevel());
+}
+
 function startGame(startLevel = 1) {
   const lifeBonus = CONFIG.prestige.upgrades.extraLife.perLevel * Save.data.prestige.upgrades.extraLife;
   game.maxLives = CONFIG.player.startLives + lifeBonus;
@@ -673,13 +688,14 @@ function startGame(startLevel = 1) {
   };
   buildGuns();
   game.drops = [];
+  game.dropCooldown = 0;
   game.active = {};
   game.effects = [];
   input.mouse.x = game.player.x;
   input.mouse.y = game.player.y;
   input.useMouse = false;
   Save.data.stats.runs++;
-  startLevel = clamp(startLevel, 1, maxStartLevel());
+  startLevel = clamp(startLevel, 1, continueLevel());
   startLevelRun(startLevel);
   setState('playing');
 }
@@ -693,7 +709,9 @@ function buildGuns() {
   if (D.slots >= 1 && D.left) guns.push({ role: 'left', id: D.left, scale: DC.scale, dmgMult: dmgPct, rateMult: rate });
   if (D.slots >= 2 && D.right) guns.push({ role: 'right', id: D.right, scale: DC.scale, dmgMult: dmgPct, rateMult: rate });
   for (const g of guns) {
-    g.base = getTurretStats(g.id);
+    const drone = g.role !== 'main';
+    g.drone = drone;
+    g.base = getTurretStats(g.id, drone && !DC.extraBullets ? Object.assign({}, Save.data.upgrades, { extraBullet: 0 }) : Save.data.upgrades);
     g.fireTimer = 0;
     g.spin = 0;
   }
@@ -869,8 +887,10 @@ function isActive(id) { return (game.active[id] || 0) > 0; }
 
 function maybeDrop(b) {
   const P = CONFIG.powerups;
+  if (!b.boss && game.dropCooldown > 0) return;
   const chance = b.boss ? CONFIG.boss.dropChance : P.dropChance + prestigeBonus('dropChance');
   if (Math.random() >= chance) return;
+  game.dropCooldown = P.dropCooldown;
   const entries = Object.entries(P.types);
   let r = Math.random() * entries.reduce((s, [, t]) => s + t.weight, 0);
   let id = entries[0][0];
@@ -881,6 +901,7 @@ function maybeDrop(b) {
 function updateDrops(dt) {
   const P = CONFIG.powerups;
   const p = game.player;
+  game.dropCooldown -= dt;
   for (const d of game.drops) {
     d.y += P.fallSpeed * dt;
     const nx = clamp(d.x, p.x - p.w / 2, p.x + p.w / 2);
@@ -972,7 +993,7 @@ function gunStats(g) {
   s.fireRate *= g.rateMult * (1 + prestigeBonus('fireRate'));
   if (isActive('doubleDamage')) s.damage *= P.doubleDamage.damageMult;
   if (isActive('rapidFire')) s.fireRate *= P.rapidFire.fireRateMult;
-  if (isActive('multiShot')) s.bullets += P.multiShot.extraBullets;
+  if (isActive('multiShot') && (!g.drone || CONFIG.drones.extraBullets)) s.bullets += P.multiShot.extraBullets;
   if (s.spinUp) s.fireRate *= 1 + (s.spinUp.maxMult - 1) * g.spin;
   return s;
 }
@@ -1117,6 +1138,7 @@ function gameOver() {
   checkAchievements();
   Save.write();
   setState('over');
+  document.getElementById('btn-retry').textContent = `Újra (${continueLevel()}. szinttől)`;
 }
 
 /* =====================================================================
@@ -1578,10 +1600,9 @@ function upgradeCard(cfg, levels, id) {
 }
 
 function renderMenu() {
-  const btn = document.getElementById('btn-play-high');
-  const L = maxStartLevel();
-  btn.classList.toggle('hidden', L <= 1);
-  btn.textContent = `Játék a ${L}. szintről`;
+  const L = continueLevel();
+  document.getElementById('btn-play').textContent = L > 1 ? `Játék (${L}. szinttől)` : 'Játék';
+  document.getElementById('btn-play-start').classList.toggle('hidden', L <= 1);
 }
 
 function renderShop() {
@@ -1601,7 +1622,7 @@ function renderShop() {
     dWrap.appendChild(makeCard(`
         <div class="info">
           <div class="name">${D.slots === 0 ? 'Bal' : 'Jobb'} segédágyú <span class="muted">${D.slots}/${DC.maxSlots}</span></div>
-          <div class="desc">Fél blokk széles ágyú a turret mellett, ${Math.round(DC.baseDamagePct * 100)}% sebzéssel.</div>
+          <div class="desc">Fél blokk széles ágyú a turret mellett, ${Math.round(DC.baseDamagePct * 100)}% sebzéssel, 1 lövedékkel.</div>
         </div>`,
       locked ? makeButton(`Zárolva · ${DC.unlockLevel}. szint`, true)
         : makeButton(`$${fmtNum(price)}`, Save.data.money < price, () => {
@@ -1811,8 +1832,8 @@ function renderStats() {
 
 let resetArmed = null;
 const actions = {
-  play: () => startGame(1),
-  playHigh: () => startGame(maxStartLevel()),
+  play: () => startGame(continueLevel()),
+  playFromStart: () => startGame(1),
   shop: () => setState('shop'),
   collection: () => setState('collection'),
   prestige: () => setState('prestige'),
