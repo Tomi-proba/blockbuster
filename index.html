@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Block Blaster</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%;
+    background: #07080d;
+    color: #e8eaf2;
+    font-family: "Courier New", Consolas, monospace;
+    overflow: hidden;
+  }
+  body { display: flex; align-items: center; justify-content: center; }
+  #wrap { position: relative; }
+  #game {
+    display: block; width: 100%; height: 100%;
+    background: #0d1018;
+    border: 2px solid #232838;
+    cursor: crosshair;
+  }
+  .screen {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 12px; padding: 20px;
+    background: rgba(8, 10, 18, 0.93);
+    text-align: center;
+    overflow-y: auto;
+  }
+  .screen.top { justify-content: flex-start; }
+  .hidden { display: none; }
+  h1 { margin: 0 0 4px; font-size: 40px; letter-spacing: 3px; color: #ffd54f; text-shadow: 3px 3px 0 #b23a48; }
+  h2 { margin: 6px 0; font-size: 26px; color: #ffd54f; }
+  h3 { margin: 14px 0 6px; font-size: 16px; color: #8fa0c8; letter-spacing: 2px; text-transform: uppercase; }
+  p { margin: 2px 0; }
+  .money { color: #7CFC9A; font-weight: bold; }
+  .muted { color: #7a8299; font-size: 13px; }
+  button {
+    font-family: inherit; font-size: 18px; font-weight: bold;
+    min-width: 220px; padding: 10px 18px;
+    background: #1c2233; color: #e8eaf2;
+    border: 2px solid #3d4a6b; cursor: pointer;
+  }
+  button:hover:not(:disabled) { background: #2a3350; border-color: #ffd54f; }
+  button:disabled { opacity: 0.4; cursor: default; }
+  button.small { min-width: 0; font-size: 14px; padding: 6px 10px; }
+  button.danger:hover:not(:disabled) { border-color: #ef5350; }
+  .list { width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 8px; }
+  .card {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; background: #141927; border: 2px solid #232a3d; text-align: left;
+  }
+  .card.selected { border-color: #ffd54f; }
+  .swatch { width: 26px; height: 26px; flex: none; }
+  .card .info { flex: 1; }
+  .card .name { font-weight: bold; }
+  .card .desc { font-size: 12px; color: #8a93ad; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game"></canvas>
+
+  <!-- FŐMENÜ -->
+  <div id="screen-menu" class="screen">
+    <h1>BLOCK BLASTER</h1>
+    <p class="muted">prototípus v0.1</p>
+    <p>Pénz: <span class="money" data-bind="money"></span></p>
+    <p class="muted">Legjobb szint: <span data-bind="best"></span></p>
+    <button data-action="play">Játék</button>
+    <button data-action="shop">Shop / Fejlesztés</button>
+    <button data-action="reset" class="danger">Mentés törlése</button>
+    <p class="muted" style="margin-top:16px">
+      Mozgás: nyilak / WASD vagy egér<br>
+      A turret automatikusan lő · Szünet: Esc / P
+    </p>
+  </div>
+
+  <!-- SHOP + FEJLESZTÉS -->
+  <div id="screen-shop" class="screen top hidden">
+    <h2>SHOP / FEJLESZTÉS</h2>
+    <p>Pénz: <span class="money" data-bind="money"></span></p>
+    <h3>Turretek</h3>
+    <div id="shop-turrets" class="list"></div>
+    <h3>Fejlesztések (minden turretre)</h3>
+    <div id="shop-upgrades" class="list"></div>
+    <button data-action="menu" style="margin-top:14px">Vissza</button>
+  </div>
+
+  <!-- SZÜNET -->
+  <div id="screen-pause" class="screen hidden">
+    <h2>SZÜNET</h2>
+    <button data-action="resume">Folytatás</button>
+    <button data-action="quit">Kilépés a menübe</button>
+  </div>
+
+  <!-- GAME OVER -->
+  <div id="screen-gameover" class="screen hidden">
+    <h1>GAME OVER</h1>
+    <p>Elért szint: <b data-bind="runLevel"></b></p>
+    <p>Szerzett pénz: <span class="money" data-bind="runMoney"></span></p>
+    <p>Összes pénz: <span class="money" data-bind="money"></span></p>
+    <button data-action="play">Újra</button>
+    <button data-action="shop">Shop / Fejlesztés</button>
+    <button data-action="menu">Főmenü</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* =====================================================================
+ * CONFIG – minden játékadat itt van, bővítéshez elég ezt szerkeszteni.
+ * ===================================================================== */
+const CONFIG = {
+  canvas: { width: 480, height: 720 },
+  saveKey: 'blockBlaster.save.v1',
+
+  player: {
+    width: 38,
+    height: 30,
+    speed: 380,          // px/s billentyűvel
+    mouseSpeed: 900,     // px/s ennyivel követi a kurzort
+    zoneTop: 0.70,       // a mozgási zóna teteje (a képernyő magasságának aránya)
+    startLives: 3,
+  },
+
+  bullet: { speed: 720 },
+
+  // Turretek. spreadStep: fok két lövedék között (0 = párhuzamos lövés, parallelGap px távolsággal)
+  turrets: {
+    basic: {
+      name: 'Basic', price: 0, color: '#4fc3f7',
+      damage: 2, fireRate: 4, bullets: 1,
+      spreadStep: 0, parallelGap: 10, bulletRadius: 4,
+      barrels: [{ angle: 0, width: 8, length: 18 }],
+      description: 'Kiegyensúlyozott alap turret.',
+    },
+    rapid: {
+      name: 'Rapid', price: 250, color: '#ffd54f',
+      damage: 1, fireRate: 11, bullets: 1,
+      spreadStep: 0, parallelGap: 8, bulletRadius: 3,
+      barrels: [{ angle: 0, width: 4, length: 22, offsetX: -5 }, { angle: 0, width: 4, length: 22, offsetX: 5 }],
+      description: 'Nagyon gyors, de gyenge lövések.',
+    },
+    spread: {
+      name: 'Spread', price: 600, color: '#ce93d8',
+      damage: 1.5, fireRate: 3, bullets: 3,
+      spreadStep: 14, parallelGap: 0, bulletRadius: 4,
+      barrels: [{ angle: -20, width: 6, length: 16 }, { angle: 0, width: 6, length: 18 }, { angle: 20, width: 6, length: 16 }],
+      description: '3 lövedék legyezőben.',
+    },
+  },
+
+  // Fejlesztések: ár = baseCost * costGrowth ^ jelenlegi szint
+  upgrades: {
+    damage: {
+      name: 'Sebzés', maxLevel: 20, baseCost: 40, costGrowth: 1.45, perLevel: 0.25,
+      describe: (lvl) => `+${Math.round(lvl * 25)}% sebzés`,
+    },
+    fireRate: {
+      name: 'Tűzgyorsaság', maxLevel: 15, baseCost: 40, costGrowth: 1.5, perLevel: 0.15,
+      describe: (lvl) => `+${Math.round(lvl * 15)}% lövés/mp`,
+    },
+    extraBullet: {
+      name: '+1 lövedék', maxLevel: 4, baseCost: 300, costGrowth: 2.5, perLevel: 1,
+      describe: (lvl) => `+${lvl} lövedék lövésenként`,
+    },
+  },
+
+  blocks: {
+    cols: 8,
+    size: 52,
+    gap: 6,
+    // HP szerinti színek (log2 skála: 1, 2-3, 4-7, 8-15, ...)
+    colors: ['#66bb6a', '#9ccc65', '#ffee58', '#ffa726', '#ef5350', '#ec407a', '#ab47bc', '#5c6bc0', '#29b6f6', '#26a69a'],
+  },
+
+  // Szint-nehézség függvények (L = szint, 1-től)
+  levels: {
+    rows: (L) => 8 + L * 2,                                  // ennyi blokksor jön a szinten
+    fallSpeed: (L) => 40 + L * 3,                            // px/s
+    rowSpacing: (L) => Math.max(0, 80 - L * 8),               // extra üres hely sorok között (px)
+    blocksPerRow: (L) => [1, Math.min(8, 1 + Math.ceil(L / 3) + 1)],
+    hpRange: (L) => [Math.ceil(L * 1.5), 4 + L * 5],
+    clearBonus: (L) => 25 * L,
+  },
+
+  economy: {
+    moneyPerHp: 0.5,     // pénz a blokk kezdő HP-ja alapján
+  },
+};
+
+/* =====================================================================
+ * MENTÉS (localStorage)
+ * ===================================================================== */
+const Save = {
+  data: null,
+
+  defaults() {
+    return {
+      money: 0,
+      owned: { basic: true },
+      selected: 'basic',
+      upgrades: Object.fromEntries(Object.keys(CONFIG.upgrades).map((k) => [k, 0])),
+      bestLevel: 0,
+    };
+  },
+
+  load() {
+    const d = this.defaults();
+    try {
+      const raw = JSON.parse(localStorage.getItem(CONFIG.saveKey) || '{}');
+      d.money = Number(raw.money) || 0;
+      d.bestLevel = Number(raw.bestLevel) || 0;
+      Object.assign(d.owned, raw.owned || {});
+      Object.assign(d.upgrades, raw.upgrades || {});
+      if (raw.selected && CONFIG.turrets[raw.selected] && d.owned[raw.selected]) d.selected = raw.selected;
+    } catch (e) { /* sérült mentés -> alapértékek */ }
+    this.data = d;
+  },
+
+  write() {
+    try { localStorage.setItem(CONFIG.saveKey, JSON.stringify(this.data)); } catch (e) { /* nincs tárhely */ }
+  },
+
+  reset() {
+    this.data = this.defaults();
+    this.write();
+  },
+};
+
+/* =====================================================================
+ * SEGÉDFÜGGVÉNYEK
+ * ===================================================================== */
+const rand = (a, b) => a + Math.random() * (b - a);
+const randInt = (a, b) => Math.floor(rand(a, b + 1));
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function getTurretStats(id) {
+  const t = CONFIG.turrets[id];
+  const u = Save.data.upgrades;
+  const U = CONFIG.upgrades;
+  return {
+    damage: t.damage * (1 + U.damage.perLevel * u.damage),
+    fireRate: t.fireRate * (1 + U.fireRate.perLevel * u.fireRate),
+    bullets: t.bullets + U.extraBullet.perLevel * u.extraBullet,
+    spreadStep: t.spreadStep,
+    parallelGap: t.parallelGap,
+    bulletRadius: t.bulletRadius,
+    color: t.color,
+  };
+}
+
+function upgradeCost(id) {
+  const c = CONFIG.upgrades[id];
+  return Math.round(c.baseCost * Math.pow(c.costGrowth, Save.data.upgrades[id]));
+}
+
+function blockColor(hp) {
+  const cols = CONFIG.blocks.colors;
+  return cols[clamp(Math.floor(Math.log2(Math.max(1, hp))), 0, cols.length - 1)];
+}
+
+/* =====================================================================
+ * JÁTÉK ÁLLAPOT
+ * ===================================================================== */
+const W = CONFIG.canvas.width;
+const H = CONFIG.canvas.height;
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+canvas.width = W;
+canvas.height = H;
+
+const HUD_H = 40;
+
+const game = {
+  state: 'menu',   // menu | shop | playing | paused | over
+  level: 1,
+  lives: 0,
+  runMoney: 0,
+  player: null,
+  turretId: 'basic',
+  stats: null,
+  fireTimer: 0,
+  bullets: [],
+  blocks: [],
+  rowsSpawned: 0,
+  spawnDist: 0,
+  banner: null,    // { text, sub, t }
+  levelClearTimer: 0,
+};
+
+const input = {
+  keys: new Set(),
+  mouse: { x: W / 2, y: H - 60 },
+  useMouse: false,
+};
+
+function startGame() {
+  game.level = 1;
+  game.lives = CONFIG.player.startLives;
+  game.runMoney = 0;
+  game.turretId = Save.data.selected;
+  game.stats = getTurretStats(game.turretId);
+  game.player = {
+    x: W / 2,
+    y: H - 50,
+    w: CONFIG.player.width,
+    h: CONFIG.player.height,
+  };
+  input.mouse.x = game.player.x;
+  input.mouse.y = game.player.y;
+  input.useMouse = false;
+  startLevel(1);
+  setState('playing');
+}
+
+function startLevel(L) {
+  game.level = L;
+  game.bullets = [];
+  game.blocks = [];
+  game.rowsSpawned = 0;
+  game.spawnDist = Infinity;   // az első sor azonnal jön
+  game.fireTimer = 0;
+  game.levelClearTimer = 0;
+  game.banner = { text: `SZINT ${L}`, sub: '', t: 1.8 };
+}
+
+function spawnRow() {
+  const B = CONFIG.blocks;
+  const L = game.level;
+  const [minN, maxN] = CONFIG.levels.blocksPerRow(L);
+  const [minHp, maxHp] = CONFIG.levels.hpRange(L);
+  const n = randInt(minN, Math.min(maxN, B.cols));
+
+  const cols = [...Array(B.cols).keys()];
+  for (let i = cols.length - 1; i > 0; i--) {         // keverés
+    const j = randInt(0, i);
+    [cols[i], cols[j]] = [cols[j], cols[i]];
+  }
+  const totalW = B.cols * B.size + (B.cols - 1) * B.gap;
+  const left = (W - totalW) / 2;
+
+  for (let i = 0; i < n; i++) {
+    const hp = randInt(minHp, maxHp);
+    game.blocks.push({
+      x: left + cols[i] * (B.size + B.gap),
+      y: HUD_H - B.size,
+      size: B.size,
+      hp,
+      maxHp: hp,
+      reward: Math.max(1, Math.ceil(hp * CONFIG.economy.moneyPerHp)),
+    });
+  }
+  game.rowsSpawned++;
+  game.spawnDist = 0;
+}
+
+function fire() {
+  const s = game.stats;
+  const p = game.player;
+  const n = s.bullets;
+  for (let i = 0; i < n; i++) {
+    const k = i - (n - 1) / 2;
+    const angle = (k * s.spreadStep) * Math.PI / 180;
+    const offX = s.spreadStep === 0 ? k * s.parallelGap : 0;
+    game.bullets.push({
+      x: p.x + offX,
+      y: p.y - p.h / 2 - 6,
+      vx: Math.sin(angle) * CONFIG.bullet.speed,
+      vy: -Math.cos(angle) * CONFIG.bullet.speed,
+      r: s.bulletRadius,
+      dmg: s.damage,
+      color: s.color,
+    });
+  }
+}
+
+function addMoney(amount) {
+  Save.data.money += amount;
+  game.runMoney += amount;
+}
+
+function loseLife() {
+  game.lives--;
+  if (game.lives <= 0) {
+    game.lives = 0;
+    gameOver();
+  }
+}
+
+function gameOver() {
+  Save.data.bestLevel = Math.max(Save.data.bestLevel, game.level);
+  Save.write();
+  setState('over');
+}
+
+/* =====================================================================
+ * UPDATE
+ * ===================================================================== */
+function update(dt) {
+  if (game.state !== 'playing') return;
+
+  updatePlayer(dt);
+
+  // Lövés
+  game.fireTimer -= dt;
+  if (game.fireTimer <= 0) {
+    fire();
+    game.fireTimer += 1 / game.stats.fireRate;
+    if (game.fireTimer < 0) game.fireTimer = 0;
+  }
+
+  // Blokkok spawnolása távolság alapján (így soha nem fedik egymást)
+  const L = game.level;
+  const speed = CONFIG.levels.fallSpeed(L);
+  const rowStep = CONFIG.blocks.size + CONFIG.blocks.gap + CONFIG.levels.rowSpacing(L);
+  if (game.rowsSpawned < CONFIG.levels.rows(L) && game.spawnDist >= rowStep && !game.banner) {
+    spawnRow();
+  }
+  game.spawnDist += speed * dt;
+
+  // Blokkok mozgatása
+  for (const b of game.blocks) b.y += speed * dt;
+
+  // Lövedékek
+  for (const bl of game.bullets) {
+    bl.x += bl.vx * dt;
+    bl.y += bl.vy * dt;
+    for (const b of game.blocks) {
+      if (b.hp <= 0) continue;
+      if (circleRect(bl, b)) {
+        b.hp -= bl.dmg;
+        bl.dead = true;
+        if (b.hp <= 0) addMoney(b.reward);
+        break;
+      }
+    }
+    if (bl.y < HUD_H - 10 || bl.x < -10 || bl.x > W + 10) bl.dead = true;
+  }
+  game.bullets = game.bullets.filter((b) => !b.dead);
+
+  // Leért blokkok
+  for (const b of game.blocks) {
+    if (b.hp > 0 && b.y >= H) {
+      b.hp = 0;
+      b.escaped = true;
+      loseLife();
+    }
+  }
+  game.blocks = game.blocks.filter((b) => b.hp > 0);
+  if (game.state !== 'playing') return;
+
+  // Banner
+  if (game.banner) {
+    game.banner.t -= dt;
+    if (game.banner.t <= 0) game.banner = null;
+  }
+
+  // Szint vége
+  if (game.rowsSpawned >= CONFIG.levels.rows(L) && game.blocks.length === 0) {
+    if (game.levelClearTimer === 0) {
+      const bonus = CONFIG.levels.clearBonus(L);
+      addMoney(bonus);
+      Save.data.bestLevel = Math.max(Save.data.bestLevel, L);
+      Save.write();
+      game.levelClearTimer = 1.5;
+      game.banner = { text: 'SZINT TELJESÍTVE', sub: `bónusz +$${bonus}`, t: 1.5 };
+    }
+    game.levelClearTimer -= dt;
+    if (game.levelClearTimer <= 0) startLevel(L + 1);
+  }
+}
+
+function updatePlayer(dt) {
+  const p = game.player;
+  const k = input.keys;
+  let dx = 0, dy = 0;
+  if (k.has('ArrowLeft') || k.has('KeyA')) dx -= 1;
+  if (k.has('ArrowRight') || k.has('KeyD')) dx += 1;
+  if (k.has('ArrowUp') || k.has('KeyW')) dy -= 1;
+  if (k.has('ArrowDown') || k.has('KeyS')) dy += 1;
+
+  if (dx || dy) {
+    input.useMouse = false;
+    const len = Math.hypot(dx, dy);
+    p.x += (dx / len) * CONFIG.player.speed * dt;
+    p.y += (dy / len) * CONFIG.player.speed * dt;
+  } else if (input.useMouse) {
+    const tx = input.mouse.x - p.x;
+    const ty = input.mouse.y - p.y;
+    const dist = Math.hypot(tx, ty);
+    const step = CONFIG.player.mouseSpeed * dt;
+    if (dist <= step) { p.x = input.mouse.x; p.y = input.mouse.y; }
+    else { p.x += (tx / dist) * step; p.y += (ty / dist) * step; }
+  }
+
+  const zoneTop = H * CONFIG.player.zoneTop;
+  p.x = clamp(p.x, p.w / 2 + 4, W - p.w / 2 - 4);
+  p.y = clamp(p.y, zoneTop + p.h / 2, H - p.h / 2 - 6);
+}
+
+function circleRect(c, r) {
+  const nx = clamp(c.x, r.x, r.x + r.size);
+  const ny = clamp(c.y, r.y, r.y + r.size);
+  const dx = c.x - nx, dy = c.y - ny;
+  return dx * dx + dy * dy <= c.r * c.r;
+}
+
+/* =====================================================================
+ * RENDER
+ * ===================================================================== */
+function render() {
+  ctx.fillStyle = '#0d1018';
+  ctx.fillRect(0, 0, W, H);
+
+  if (game.state === 'menu' || game.state === 'shop' || !game.player) return;
+
+  // Mozgási zóna jelzése
+  const zoneTop = H * CONFIG.player.zoneTop;
+  ctx.strokeStyle = '#1e2436';
+  ctx.setLineDash([6, 8]);
+  ctx.beginPath();
+  ctx.moveTo(0, zoneTop);
+  ctx.lineTo(W, zoneTop);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Alsó "veszélyvonal"
+  ctx.fillStyle = '#3a1820';
+  ctx.fillRect(0, H - 3, W, 3);
+
+  for (const b of game.blocks) drawBlock(b);
+
+  for (const bl of game.bullets) {
+    ctx.fillStyle = bl.color;
+    ctx.beginPath();
+    ctx.arc(bl.x, bl.y, bl.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  drawTurret(game.player, CONFIG.turrets[game.turretId]);
+  drawHud();
+
+  if (game.banner) {
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillRect(0, H / 2 - 50, W, 90);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#ffd54f';
+    ctx.font = 'bold 34px "Courier New", monospace';
+    ctx.fillText(game.banner.text, W / 2, H / 2 - 12);
+    if (game.banner.sub) {
+      ctx.fillStyle = '#7CFC9A';
+      ctx.font = 'bold 20px "Courier New", monospace';
+      ctx.fillText(game.banner.sub, W / 2, H / 2 + 22);
+    }
+  }
+}
+
+function drawBlock(b) {
+  const hpShown = Math.ceil(b.hp);
+  ctx.fillStyle = blockColor(hpShown);
+  ctx.fillRect(b.x, b.y, b.size, b.size);
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillRect(b.x, b.y + b.size - 5, b.size, 5);
+
+  ctx.fillStyle = '#10131c';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const digits = String(hpShown).length;
+  ctx.font = `bold ${digits >= 4 ? 15 : digits === 3 ? 18 : 22}px "Courier New", monospace`;
+  ctx.fillText(hpShown, b.x + b.size / 2, b.y + b.size / 2);
+}
+
+function drawTurret(p, t) {
+  ctx.save();
+  ctx.translate(p.x, p.y);
+
+  // Csövek
+  ctx.fillStyle = '#c9d1e6';
+  for (const br of t.barrels) {
+    ctx.save();
+    ctx.translate(br.offsetX || 0, -4);
+    ctx.rotate(br.angle * Math.PI / 180);
+    ctx.fillRect(-br.width / 2, -br.length - 6, br.width, br.length);
+    ctx.restore();
+  }
+
+  // Test
+  ctx.fillStyle = t.color;
+  ctx.fillRect(-p.w / 2, -p.h / 2 + 8, p.w, p.h - 8);
+  ctx.beginPath();
+  ctx.arc(0, -2, 11, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#10131c';
+  ctx.fillRect(-p.w / 2 + 4, p.h / 2 - 6, p.w - 8, 3);
+
+  ctx.restore();
+}
+
+function drawHud() {
+  ctx.fillStyle = '#090b12';
+  ctx.fillRect(0, 0, W, HUD_H);
+  ctx.fillStyle = '#232838';
+  ctx.fillRect(0, HUD_H - 2, W, 2);
+
+  ctx.textBaseline = 'middle';
+  ctx.font = 'bold 18px "Courier New", monospace';
+
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#7CFC9A';
+  ctx.fillText(`$${Save.data.money}`, 12, HUD_H / 2);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ffd54f';
+  ctx.fillText(`SZINT ${game.level}`, W / 2, HUD_H / 2);
+
+  // Életek
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#ef5350';
+  ctx.fillText('♥'.repeat(game.lives) + '♡'.repeat(Math.max(0, CONFIG.player.startLives - game.lives)), W - 12, HUD_H / 2);
+
+  // Szint-haladás
+  const prog = game.rowsSpawned / CONFIG.levels.rows(game.level);
+  ctx.fillStyle = '#ffd54f';
+  ctx.fillRect(0, HUD_H - 2, W * prog, 2);
+}
+
+/* =====================================================================
+ * UI (DOM képernyők)
+ * ===================================================================== */
+const screens = {
+  menu: document.getElementById('screen-menu'),
+  shop: document.getElementById('screen-shop'),
+  paused: document.getElementById('screen-pause'),
+  over: document.getElementById('screen-gameover'),
+};
+
+function setState(state) {
+  game.state = state;
+  for (const [name, el] of Object.entries(screens)) el.classList.toggle('hidden', name !== state);
+  if (state === 'shop') renderShop();
+  refreshBindings();
+}
+
+function refreshBindings() {
+  const values = {
+    money: `$${Save.data.money}`,
+    best: Save.data.bestLevel,
+    runLevel: game.level,
+    runMoney: `$${game.runMoney}`,
+  };
+  document.querySelectorAll('[data-bind]').forEach((el) => {
+    el.textContent = values[el.dataset.bind];
+  });
+}
+
+function renderShop() {
+  const tWrap = document.getElementById('shop-turrets');
+  const uWrap = document.getElementById('shop-upgrades');
+  tWrap.innerHTML = '';
+  uWrap.innerHTML = '';
+
+  for (const [id, t] of Object.entries(CONFIG.turrets)) {
+    const owned = !!Save.data.owned[id];
+    const selected = Save.data.selected === id;
+    const s = getTurretStats(id);
+    const card = document.createElement('div');
+    card.className = 'card' + (selected ? ' selected' : '');
+    card.innerHTML = `
+      <div class="swatch" style="background:${t.color}"></div>
+      <div class="info">
+        <div class="name">${t.name}</div>
+        <div class="desc">${t.description}</div>
+        <div class="desc">Sebzés ${s.damage.toFixed(1)} · ${s.fireRate.toFixed(1)} lövés/mp · ${s.bullets} lövedék</div>
+      </div>`;
+    const btn = document.createElement('button');
+    btn.className = 'small';
+    if (selected) {
+      btn.textContent = 'Kiválasztva';
+      btn.disabled = true;
+    } else if (owned) {
+      btn.textContent = 'Kiválaszt';
+      btn.onclick = () => { Save.data.selected = id; Save.write(); renderShop(); };
+    } else {
+      btn.textContent = `Vétel $${t.price}`;
+      btn.disabled = Save.data.money < t.price;
+      btn.onclick = () => {
+        if (Save.data.money < t.price) return;
+        Save.data.money -= t.price;
+        Save.data.owned[id] = true;
+        Save.data.selected = id;
+        Save.write();
+        renderShop();
+      };
+    }
+    card.appendChild(btn);
+    tWrap.appendChild(card);
+  }
+
+  for (const [id, u] of Object.entries(CONFIG.upgrades)) {
+    const lvl = Save.data.upgrades[id];
+    const maxed = lvl >= u.maxLevel;
+    const cost = upgradeCost(id);
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <div class="info">
+        <div class="name">${u.name} <span class="muted">${lvl}/${u.maxLevel}</span></div>
+        <div class="desc">Jelenleg: ${u.describe(lvl)}</div>
+      </div>`;
+    const btn = document.createElement('button');
+    btn.className = 'small';
+    btn.textContent = maxed ? 'MAX' : `$${cost}`;
+    btn.disabled = maxed || Save.data.money < cost;
+    btn.onclick = () => {
+      if (maxed || Save.data.money < cost) return;
+      Save.data.money -= cost;
+      Save.data.upgrades[id]++;
+      Save.write();
+      renderShop();
+    };
+    card.appendChild(btn);
+    uWrap.appendChild(card);
+  }
+  refreshBindings();
+}
+
+const actions = {
+  play: () => startGame(),
+  shop: () => setState('shop'),
+  menu: () => setState('menu'),
+  resume: () => setState('playing'),
+  quit: () => { Save.write(); game.player = null; setState('menu'); },
+  reset: () => {
+    if (confirm('Biztosan törlöd a mentést? A pénz és minden fejlesztés elvész.')) {
+      Save.reset();
+      refreshBindings();
+    }
+  },
+};
+
+document.querySelectorAll('[data-action]').forEach((el) => {
+  el.addEventListener('click', () => actions[el.dataset.action]());
+});
+
+/* =====================================================================
+ * INPUT
+ * ===================================================================== */
+const GAME_KEYS = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'KeyA', 'KeyD', 'KeyW', 'KeyS', 'Space'];
+
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Escape' || e.code === 'KeyP') {
+    if (game.state === 'playing') { Save.write(); setState('paused'); }
+    else if (game.state === 'paused') setState('playing');
+    return;
+  }
+  if (GAME_KEYS.includes(e.code) && game.state === 'playing') e.preventDefault();
+  input.keys.add(e.code);
+});
+window.addEventListener('keyup', (e) => input.keys.delete(e.code));
+window.addEventListener('blur', () => {
+  input.keys.clear();
+  if (game.state === 'playing') { Save.write(); setState('paused'); }
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  const r = canvas.getBoundingClientRect();
+  input.mouse.x = (e.clientX - r.left) * (W / r.width);
+  input.mouse.y = (e.clientY - r.top) * (H / r.height);
+  input.useMouse = true;
+});
+
+window.addEventListener('beforeunload', () => Save.write());
+
+/* =====================================================================
+ * MÉRETEZÉS + FŐ CIKLUS
+ * ===================================================================== */
+const wrap = document.getElementById('wrap');
+function fit() {
+  const scale = Math.min(window.innerWidth / W, window.innerHeight / H) * 0.97;
+  wrap.style.width = `${Math.floor(W * scale)}px`;
+  wrap.style.height = `${Math.floor(H * scale)}px`;
+}
+window.addEventListener('resize', fit);
+fit();
+
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  update(dt);
+  render();
+  requestAnimationFrame(loop);
+}
+
+Save.load();
+setState('menu');
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
