@@ -6,6 +6,7 @@
 <title>Block Blaster</title>
 <style>
   * { box-sizing: border-box; }
+  :root { color-scheme: dark; }
   html, body {
     margin: 0; height: 100%;
     background: #07080d;
@@ -736,10 +737,22 @@ const actions = {
   menu: () => setState('menu'),
   resume: () => setState('playing'),
   quit: () => { Save.write(); game.player = null; setState('menu'); },
+  // Kétlépéses törlés (a böngészős confirm() nem mindenhol érhető el)
   reset: () => {
-    if (confirm('Biztosan törlöd a mentést? A pénz és minden fejlesztés elvész.')) {
+    const btn = document.querySelector('[data-action="reset"]');
+    if (btn.dataset.armed) {
+      clearTimeout(Number(btn.dataset.armed));
+      delete btn.dataset.armed;
+      btn.textContent = 'Mentés törölve';
       Save.reset();
       refreshBindings();
+      setTimeout(() => { btn.textContent = 'Mentés törlése'; }, 1500);
+    } else {
+      btn.textContent = 'Biztos? Kattints újra!';
+      btn.dataset.armed = setTimeout(() => {
+        delete btn.dataset.armed;
+        btn.textContent = 'Mentés törlése';
+      }, 3000);
     }
   },
 };
