@@ -100,6 +100,9 @@
   .tcard .stats { font-size: 11px; color: #aeb6cc; line-height: 1.4; }
   .tcard .roles { display: flex; gap: 4px; }
   .tcard .status { font-size: 11px; color: #7a8299; }
+  .bar { height: 4px; background: #1d2333; margin-top: 4px; }
+  .bar span { display: block; height: 100%; background: #ffd54f; }
+  #achievement-list h3 { margin: 10px 0 0; text-align: left; }
   .stat-row { display: flex; justify-content: space-between; width: 100%; max-width: 360px; padding: 5px 0; border-bottom: 1px solid #1d2333; font-size: 14px; }
   .stat-row b { color: #ffd54f; }
   .lb-row { display: grid; grid-template-columns: 34px 1fr auto auto; gap: 8px; width: 100%; max-width: 380px; padding: 5px 6px; border-bottom: 1px solid #1d2333; font-size: 14px; text-align: left; }
@@ -130,7 +133,7 @@
   <!-- FŐMENÜ -->
   <div id="screen-menu" class="screen">
     <h1>BLOCK<br>BLASTER</h1>
-    <p class="muted">prototípus v0.5</p>
+    <p class="muted">prototípus v0.6</p>
     <p>Pénz: <span class="money" data-bind="money"></span> · Prestige pont: <span class="pp" data-bind="pp"></span></p>
     <p class="muted">Legjobb szint: <span data-bind="best"></span></p>
     <button data-action="play" id="btn-play">Játék</button>
@@ -256,6 +259,16 @@
 /* =====================================================================
  * CONFIG – minden játékadat itt van, bővítéshez elég ezt szerkeszteni.
  * ===================================================================== */
+// Célszám ezres tagolással a leírásokhoz (pl. 10 000)
+function fmtGoal(n) {
+  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+}
+
+// Achievement-lépcső: [cél, név, jutalom, régi azonosító?] sorokból achievement objektumok
+function achTier(cat, stat, idPrefix, desc, rows) {
+  return rows.map(([goal, name, reward, id]) => ({ id: id || idPrefix + goal, cat, name, desc: desc(goal), stat, goal, reward }));
+}
+
 const CONFIG = {
   saveKey: 'blockBlaster.save.v1',   // ne változtasd, különben elvesznek a régi mentések
 
@@ -548,24 +561,117 @@ const CONFIG = {
     },
   },
 
-  // Achievementek: stat >= goal -> jutalom (pénz)
+  // Achievementek: stat >= goal -> jutalom (pénz). Kategóriánként csoportosítva jelennek meg.
+  // Sor formátuma: [cél, név, jutalom, (opcionális) régi azonosító]
   achievements: [
-    { id: 'kills100',    name: 'Első vér',        desc: 'Pusztíts el 100 blokkot',       stat: 'kills',        goal: 100,     reward: 300 },
-    { id: 'kills1k',     name: 'Blokkromboló',    desc: 'Pusztíts el 1 000 blokkot',     stat: 'kills',        goal: 1000,    reward: 3000 },
-    { id: 'kills10k',    name: 'Blokkirtó',       desc: 'Pusztíts el 10 000 blokkot',    stat: 'kills',        goal: 10000,   reward: 50000 },
-    { id: 'kills100k',   name: 'Megállíthatatlan', desc: 'Pusztíts el 100 000 blokkot',  stat: 'kills',        goal: 100000,  reward: 2000000 },
-    { id: 'level10',     name: 'Bemelegítés',     desc: 'Érd el a 10. szintet',          stat: 'bestLevel',    goal: 10,      reward: 2000 },
-    { id: 'level25',     name: 'Veterán',         desc: 'Érd el a 25. szintet',          stat: 'bestLevel',    goal: 25,      reward: 25000 },
-    { id: 'level50',     name: 'Mester',          desc: 'Érd el az 50. szintet',         stat: 'bestLevel',    goal: 50,      reward: 1000000 },
-    { id: 'level100',    name: 'Legenda',         desc: 'Érd el a 100. szintet',         stat: 'bestLevel',    goal: 100,     reward: 100000000 },
-    { id: 'boss1',       name: 'Bossölő',         desc: 'Győzz le 1 bosst',              stat: 'bossKills',    goal: 1,       reward: 500 },
-    { id: 'boss25',      name: 'Bossvadász',      desc: 'Győzz le 25 bosst',             stat: 'bossKills',    goal: 25,      reward: 100000 },
-    { id: 'power50',     name: 'Power-up gyűjtő', desc: 'Vegyél fel 50 power-upot',      stat: 'powerups',     goal: 50,      reward: 5000 },
-    { id: 'turrets5',    name: 'Fegyvertár',      desc: 'Szerezz meg 5 turretet',        stat: 'turretsOwned', goal: 5,       reward: 5000 },
-    { id: 'turretsAll',  name: 'Teljes arzenál',  desc: 'Szerezd meg az összes turretet', stat: 'turretsOwned', goal: 0 /* = turretek száma, lent állítjuk be */, reward: 500000 },
-    { id: 'money1m',     name: 'Milliomos',       desc: 'Szerezz összesen 1 000 000 pénzt', stat: 'moneyEarned', goal: 1e6,   reward: 100000 },
-    { id: 'prestige1',   name: 'Újjászületés',    desc: 'Prestige-elj egyszer',          stat: 'prestiges',    goal: 1,       reward: 10000 },
-    { id: 'prestige5',   name: 'Örök körforgás',  desc: 'Prestige-elj 5-ször',           stat: 'prestiges',    goal: 5,       reward: 500000 },
+    ...achTier('Blokkok', 'kills', 'kills', (g) => `Pusztíts el ${fmtGoal(g)} blokkot`, [
+      [100, 'Első vér', 300, 'kills100'],
+      [500, 'Bemelegedve', 1500],
+      [1000, 'Blokkromboló', 3000, 'kills1k'],
+      [5000, 'Rombolómunkás', 15000],
+      [10000, 'Blokkirtó', 50000, 'kills10k'],
+      [50000, 'Tömegpusztító', 400000],
+      [100000, 'Megállíthatatlan', 2000000, 'kills100k'],
+      [1000000, 'Végtelen pusztítás', 50000000],
+    ]),
+    ...achTier('Szintek', 'bestLevel', 'level', (g) => `Érd el a ${g}. szintet`, [
+      [5, 'Első lépések', 300],
+      [10, 'Bemelegítés', 2000, 'level10'],
+      [15, 'Belejöttél', 5000],
+      [20, 'Haladó', 12000],
+      [25, 'Veterán', 25000, 'level25'],
+      [30, 'Profi', 60000],
+      [40, 'Szakértő', 250000],
+      [50, 'Mester', 1000000, 'level50'],
+      [75, 'Elit', 20000000],
+      [100, 'Legenda', 100000000, 'level100'],
+    ]),
+    ...achTier('Szintek', 'levelsCleared', 'cleared', (g) => `Teljesíts összesen ${fmtGoal(g)} szintet`, [
+      [50, 'Szintgyűjtő', 3000],
+      [250, 'Szintfaló', 30000],
+      [1000, 'Szintgép', 500000],
+    ]),
+    ...achTier('Szintek', 'perfectLevels', 'perfect', (g) => `Teljesíts ${fmtGoal(g)} szintet életvesztés nélkül`, [
+      [10, 'Hibátlan', 3000],
+      [100, 'Érinthetetlen', 50000],
+      [500, 'Tökéletesség', 750000],
+    ]),
+    ...achTier('Bossok', 'bossKills', 'boss', (g) => (g === 1 ? 'Győzz le egy bosst' : `Győzz le ${g} bosst`), [
+      [1, 'Bossölő', 500, 'boss1'],
+      [5, 'Bossverő', 5000],
+      [25, 'Bossvadász', 100000, 'boss25'],
+      [100, 'Bossmészáros', 2000000],
+    ]),
+    ...achTier('Különleges blokkok', 'armoredKills', 'armored', (g) => `Pusztíts el ${fmtGoal(g)} páncélos blokkot`, [
+      [100, 'Páncéltörő', 10000],
+      [1000, 'Konzervnyitó', 200000],
+    ]),
+    ...achTier('Különleges blokkok', 'fastKills', 'fast', (g) => `Pusztíts el ${fmtGoal(g)} gyors blokkot`, [
+      [100, 'Gyorsabb voltam', 15000],
+      [1000, 'Villámreflex', 250000],
+    ]),
+    ...achTier('Különleges blokkok', 'splitterKills', 'splitter', (g) => `Pusztíts el ${fmtGoal(g)} osztódó blokkot`, [
+      [100, 'Oszd meg és uralkodj', 20000],
+      [1000, 'Sejtosztódás', 300000],
+    ]),
+    ...achTier('Power-upok', 'powerups', 'power', (g) => `Vegyél fel ${fmtGoal(g)} power-upot`, [
+      [10, 'Ajándék', 1000],
+      [50, 'Power-up gyűjtő', 5000, 'power50'],
+      [250, 'Power-up függő', 50000],
+      [1000, 'Feltöltve', 500000],
+    ]),
+    ...achTier('Fegyverek', 'turretsOwned', 'turrets', (g) => `Szerezz meg ${g} turretet`, [
+      [3, 'Kis arzenál', 1000],
+      [5, 'Fegyvertár', 5000, 'turrets5'],
+      [8, 'Fegyverkereskedő', 50000],
+    ]),
+    { id: 'turretsAll', cat: 'Fegyverek', name: 'Teljes arzenál', desc: 'Szerezd meg az összes turretet', stat: 'turretsOwned', goal: 0 /* = turretek száma, lent állítjuk be */, reward: 500000 },
+    ...achTier('Fegyverek', 'drones', 'drones', (g) => (g === 1 ? 'Vegyél egy segédágyút' : 'Vegyél két segédágyút'), [
+      [1, 'Segítő kéz', 2000],
+      [2, 'Kíséret', 20000],
+    ]),
+    ...achTier('Fegyverek', 'upgradesBought', 'upg', (g) => `Vegyél ${g} fejlesztést`, [
+      [10, 'Fejlesztő', 1000],
+      [50, 'Mérnök', 20000],
+      [150, 'Feltaláló', 300000],
+    ]),
+    ...achTier('Pénz', 'moneyEarned', 'money', (g) => `Szerezz összesen $${fmtGoal(g)} pénzt`, [
+      [10000, 'Zsebpénz', 1000],
+      [100000, 'Megtakarítás', 10000],
+      [1000000, 'Milliomos', 100000, 'money1m'],
+      [10000000, 'Tőkés', 1000000],
+      [100000000, 'Mágnás', 10000000],
+      [1000000000, 'Milliárdos', 100000000],
+    ]),
+    ...achTier('Pénz', 'bestRunMoney', 'runmoney', (g) => `Szerezz $${fmtGoal(g)} pénzt egyetlen menetben`, [
+      [10000, 'Jó menet', 2000],
+      [100000, 'Kiváló menet', 20000],
+      [1000000, 'Arany menet', 200000],
+    ]),
+    ...achTier('Kitartás', 'runs', 'runs', (g) => `Játssz ${g} menetet`, [
+      [10, 'Kitartás', 1000],
+      [50, 'Rendszeres játékos', 10000],
+      [200, 'Megszállott', 100000],
+    ]),
+    ...achTier('Kitartás', 'playTime', 'time', (g) => `Játssz összesen ${g / 3600} órát`, [
+      [3600, 'Egy óra', 5000],
+      [18000, 'Öt óra', 50000],
+      [72000, 'Elkötelezett', 500000],
+    ]),
+    ...achTier('Prestige', 'prestiges', 'prestige', (g) => (g === 1 ? 'Prestige-elj egyszer' : `Prestige-elj ${g}-szer`), [
+      [1, 'Újjászületés', 10000, 'prestige1'],
+      [5, 'Örök körforgás', 500000, 'prestige5'],
+      [10, 'Újra és újra', 2000000],
+      [25, 'Örökkévaló', 20000000],
+    ]),
+    ...achTier('Prestige', 'ppTotal', 'pp', (g) => `Szerezz összesen ${g} prestige pontot`, [
+      [10, 'Tapasztalt', 100000],
+      [50, 'Bölcs', 2000000],
+    ]),
+    ...achTier('Achievementek', 'achievements', 'ach', (g) => `Teljesíts ${g} achievementet`, [
+      [25, 'Gyűjtögető', 100000],
+      [50, 'Achievement-vadász', 5000000],
+    ]),
   ],
 };
 CONFIG.achievements.find((a) => a.id === 'turretsAll').goal = Object.keys(CONFIG.turrets).length;
@@ -590,7 +696,13 @@ const Save = {
       lastReached: 0,        // az előző menetben elért szint (innen számoljuk a folytatást)
       drones: { slots: 0, left: null, right: null, upgrades: zeroLevels(CONFIG.drones.upgrades) },
       prestige: { points: 0, total: 0, count: 0, upgrades: zeroLevels(CONFIG.prestige.upgrades) },
-      stats: { kills: 0, bossKills: 0, moneyEarned: 0, powerups: 0, runs: 0 },
+      stats: {
+        kills: 0, bossKills: 0, moneyEarned: 0, powerups: 0, runs: 0,
+        armoredKills: 0, fastKills: 0, splitterKills: 0,
+        levelsCleared: 0, perfectLevels: 0, upgradesBought: 0,
+        playTime: 0,          // másodperc
+        bestRunMoney: 0,
+      },
       achievements: {},
       playerName: '',        // név a ranglistán
       submittedBest: 0,      // a legjobb már beküldött szint ezzel a névvel
@@ -886,6 +998,7 @@ function startLevelRun(L) {
   game.lastRowHeight = 0;
   game.spawnDelay = CONFIG.timing.levelStartDelay;
   game.levelClearTimer = 0;
+  game.levelStartLives = game.lives;
   for (const g of game.guns) { g.fireTimer = 0; g.spin = 0; }
   game.banner = { text: `SZINT ${L}`, sub: isBossLevel(L) ? 'BOSS SZINT!' : '', t: 1.2 };
 }
@@ -1094,6 +1207,7 @@ function killBlock(b) {
   addMoney(b.reward * coins * (1 + prestigeBonus('money')));
   Save.data.stats.kills++;
   if (b.boss) Save.data.stats.bossKills++;
+  if (b.type) Save.data.stats[b.type + 'Kills']++;
   maybeDrop(b);
   if (b.type === 'splitter') splitBlock(b);
 }
@@ -1287,6 +1401,7 @@ function loseLife(n) {
 function gameOver() {
   recordLevel(game.level);
   Save.data.lastReached = game.level;
+  Save.data.stats.bestRunMoney = Math.max(Save.data.stats.bestRunMoney, game.runMoney);
   checkAchievements();
   Save.write();
   setState('over');
@@ -1300,6 +1415,7 @@ function gameOver() {
 function update(dt) {
   if (game.state !== 'playing') return;
   game.time += dt;
+  Save.data.stats.playTime += dt;
 
   updatePlayer(dt);
   layoutGuns();
@@ -1342,6 +1458,8 @@ function update(dt) {
       const bonus = Math.round(CONFIG.waves.clearBonus(L) * (1 + prestigeBonus('money')));
       addMoney(bonus);
       recordLevel(L + 1);
+      Save.data.stats.levelsCleared++;
+      if (game.lives >= game.levelStartLives) Save.data.stats.perfectLevels++;
       Save.write();
       game.levelClearTimer = CONFIG.timing.levelClearDelay;
       game.banner = { text: `LEVEL ${L} COMPLETE`, sub: `bónusz +$${fmtNum(bonus)}`, t: CONFIG.timing.levelClearDelay };
@@ -1637,6 +1755,17 @@ const STAT_VALUES = {
   bestLevel: () => Save.data.bestLevel,
   prestiges: () => Save.data.prestige.count,
   turretsOwned: () => Object.keys(CONFIG.turrets).filter((id) => Save.data.owned[id]).length,
+  armoredKills: () => Save.data.stats.armoredKills,
+  fastKills: () => Save.data.stats.fastKills,
+  splitterKills: () => Save.data.stats.splitterKills,
+  levelsCleared: () => Save.data.stats.levelsCleared,
+  perfectLevels: () => Save.data.stats.perfectLevels,
+  upgradesBought: () => Save.data.stats.upgradesBought,
+  playTime: () => Save.data.stats.playTime,
+  bestRunMoney: () => Save.data.stats.bestRunMoney,
+  drones: () => Save.data.drones.slots,
+  ppTotal: () => Save.data.prestige.total,
+  achievements: () => Object.keys(Save.data.achievements).length,
 };
 
 function checkAchievements() {
@@ -1801,6 +1930,7 @@ function setState(state) {
 }
 
 function rerender() {
+  checkAchievements();
   if (RENDERERS[game.state]) RENDERERS[game.state]();
   refreshBindings();
 }
@@ -1851,6 +1981,7 @@ function upgradeCard(cfg, levels, id) {
       if (maxed || Save.data.money < cost) return;
       Save.data.money -= cost;
       levels[id]++;
+      Save.data.stats.upgradesBought++;
       Save.write();
       rerender();
     }));
@@ -1969,6 +2100,7 @@ function renderUpgrade() {
         if (maxed || Save.data.money < cost) return;
         Save.data.money -= cost;
         lv[uid]++;
+        Save.data.stats.upgradesBought++;
         Save.write();
         rerender();
       })));
@@ -2107,18 +2239,34 @@ function doPrestige() {
   rerender();
 }
 
+function achProgressText(a) {
+  const val = Math.min(a.goal, STAT_VALUES[a.stat]());
+  if (a.stat === 'playTime') return `${(val / 3600).toFixed(1)}/${a.goal / 3600} óra`;
+  return `${fmtNum(val)}/${fmtNum(a.goal)}`;
+}
+
 function renderAchievements() {
   const wrap = document.getElementById('achievement-list');
   wrap.innerHTML = '';
-  for (const a of CONFIG.achievements) {
-    const done = !!Save.data.achievements[a.id];
-    const val = Math.min(a.goal, STAT_VALUES[a.stat]());
-    wrap.appendChild(makeCard(`
-        <div class="info">
-          <div class="name">${done ? '★' : '☆'} ${a.name}</div>
-          <div class="desc">${a.desc} · ${done ? 'kész' : `${fmtNum(val)}/${fmtNum(a.goal)}`}</div>
-        </div>
-        <div class="money" style="font-size:12px">$${fmtNum(a.reward)}</div>`, null, done ? 'done' : ''));
+  const cats = [...new Set(CONFIG.achievements.map((a) => a.cat))];
+  for (const cat of cats) {
+    const list = CONFIG.achievements.filter((a) => a.cat === cat);
+    const done = list.filter((a) => Save.data.achievements[a.id]).length;
+    const h = document.createElement('h3');
+    h.textContent = `${cat} · ${done}/${list.length}`;
+    wrap.appendChild(h);
+    for (const a of list) {
+      const ok = !!Save.data.achievements[a.id];
+      const pct = Math.round(Math.min(1, STAT_VALUES[a.stat]() / a.goal) * 100);
+      const card = makeCard(`
+          <div class="info">
+            <div class="name">${ok ? '★' : '☆'} ${a.name}</div>
+            <div class="desc">${a.desc} · ${ok ? 'kész' : achProgressText(a)}</div>
+            ${ok ? '' : `<div class="bar"><span style="width:${pct}%"></span></div>`}
+          </div>
+          <div class="money" style="font-size:12px">$${fmtNum(a.reward)}</div>`, null, ok ? 'done' : '');
+      wrap.appendChild(card);
+    }
   }
 }
 
@@ -2133,6 +2281,12 @@ function renderStats() {
     ['Lejátszott menetek', fmtNum(s.runs)],
     ['Prestige-ek száma', Save.data.prestige.count],
     ['Összes prestige pont', Save.data.prestige.total],
+    ['Teljesített szintek', fmtNum(s.levelsCleared)],
+    ['Hibátlan szintek', fmtNum(s.perfectLevels)],
+    ['Páncélos / gyors / osztódó', `${fmtNum(s.armoredKills)} / ${fmtNum(s.fastKills)} / ${fmtNum(s.splitterKills)}`],
+    ['Legjobb menet pénze', '$' + fmtNum(s.bestRunMoney)],
+    ['Vásárolt fejlesztések', fmtNum(s.upgradesBought)],
+    ['Játékidő', `${Math.floor(s.playTime / 3600)} óra ${Math.floor((s.playTime % 3600) / 60)} perc`],
     ['Megszerzett turretek', `${STAT_VALUES.turretsOwned()}/${Object.keys(CONFIG.turrets).length}`],
     ['Achievementek', `${Object.keys(Save.data.achievements).length}/${CONFIG.achievements.length}`],
   ];
