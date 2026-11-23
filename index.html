@@ -2,7 +2,7 @@
 <html lang="hu">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Block Blaster</title>
 <style>
   * { box-sizing: border-box; }
@@ -21,16 +21,31 @@
     background: #0d1018;
     outline: 2px solid #232838;
     cursor: crosshair;
+    touch-action: none;            /* érintésnél ne görgessen / nagyítson az oldal */
+    -webkit-user-select: none; user-select: none;
   }
+  #pause-btn {
+    position: absolute; top: 0; right: 0;
+    width: 12%; height: 6.11%;     /* a HUD jobb széle (48×44 logikai px) */
+    min-width: 0; min-height: 0 !important; padding: 0 !important;
+    background: transparent; border: none; color: #8fa0c8;
+    font-weight: bold; line-height: 1;
+  }
+  #pause-btn:hover { background: #1c2233; color: #ffd54f; }
   .screen {
-    position: absolute; inset: 0;
+    position: fixed; inset: 0;     /* a menük a teljes képernyőt használják (fekvő módban is) */
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 8px; padding: 16px 12px;
+    gap: 8px;
+    padding: max(16px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
     background: rgba(8, 10, 18, 0.96);
     text-align: center;
     overflow-y: auto;
   }
   .screen.top { justify-content: flex-start; }
+  /* Középre igazítás úgy, hogy ha nem fér ki, a teteje is görgethető maradjon */
+  .screen:not(.top) { justify-content: flex-start; }
+  .screen:not(.top) > :first-child { margin-top: auto; }
+  .screen:not(.top) > :last-child { margin-bottom: auto; }
   .hidden { display: none !important; }
   h1 { margin: 0 0 4px; font-size: 34px; letter-spacing: 3px; color: #ffd54f; text-shadow: 3px 3px 0 #b23a48; }
   h2 { margin: 4px 0; font-size: 22px; color: #ffd54f; }
@@ -41,7 +56,8 @@
   .muted { color: #7a8299; font-size: 12px; }
   button {
     font-family: inherit; font-size: 16px; font-weight: bold;
-    min-width: 220px; padding: 8px 14px;
+    min-width: min(220px, 100%); padding: 8px 14px;
+    touch-action: manipulation;
     background: #1c2233; color: #e8eaf2;
     border: 2px solid #3d4a6b; cursor: pointer;
   }
@@ -52,6 +68,17 @@
   button.danger:hover:not(:disabled) { border-color: #ef5350; }
   .menu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; max-width: 360px; }
   .menu-grid button { min-width: 0; font-size: 14px; }
+  .menu-grid button.wide { grid-column: span 2; }
+  .turret-switch { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; }
+  .upg-head canvas { width: 54px; height: 54px; flex: none; }
+  /* Érintőképernyő: nagyobb, könnyen eltalálható gombok */
+  @media (pointer: coarse) {
+    button { font-size: 18px; min-height: 50px; padding: 10px 16px; }
+    button.small { font-size: 14px; min-height: 42px; padding: 8px 12px; }
+    .menu-grid button { font-size: 16px; min-height: 50px; }
+    .name-form input { font-size: 17px; min-height: 44px; }
+    .tcard .roles button { min-width: 48px; }
+  }
   .list { width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 6px; }
   .card {
     display: flex; align-items: center; gap: 8px;
@@ -87,7 +114,7 @@
   }
   .name-form input:focus { outline: none; border-color: #ffd54f; }
   #toast {
-    position: absolute; left: 50%; top: 52px; transform: translateX(-50%);
+    position: fixed; left: 50%; top: max(52px, env(safe-area-inset-top)); transform: translateX(-50%);
     background: #1c2233; border: 2px solid #ffd54f; color: #ffd54f;
     padding: 6px 12px; font-size: 13px; font-weight: bold; white-space: nowrap; z-index: 5;
     pointer-events: none;
@@ -97,27 +124,29 @@
 <body>
 <div id="wrap">
   <canvas id="game"></canvas>
+  <button id="pause-btn" class="hidden" data-action="pause" aria-label="Szünet">II</button>
   <div id="toast" class="hidden"></div>
 
   <!-- FŐMENÜ -->
   <div id="screen-menu" class="screen">
     <h1>BLOCK<br>BLASTER</h1>
-    <p class="muted">prototípus v0.4</p>
+    <p class="muted">prototípus v0.5</p>
     <p>Pénz: <span class="money" data-bind="money"></span> · Prestige pont: <span class="pp" data-bind="pp"></span></p>
     <p class="muted">Legjobb szint: <span data-bind="best"></span></p>
     <button data-action="play" id="btn-play">Játék</button>
     <button data-action="playFromStart" id="btn-play-start" class="small hidden">Kezdés az 1. szintről</button>
     <div class="menu-grid">
       <button data-action="shop">Shop</button>
+      <button data-action="upgrade">Upgrade</button>
       <button data-action="collection">Collection</button>
       <button data-action="prestige">Prestige</button>
       <button data-action="achievements">Achievementek</button>
       <button data-action="stats">Statisztika</button>
-      <button data-action="leaderboard">Ranglista</button>
+      <button data-action="leaderboard" class="wide">Ranglista</button>
     </div>
     <button data-action="reset" class="danger small">Mentés törlése</button>
     <p class="muted" style="margin-top:10px">
-      Mozgás: nyilak / WASD vagy egér · Szünet: Esc / P<br>
+      Mozgás: nyilak / WASD, egér vagy húzás ujjal · Szünet: Esc / P / II<br>
       Szedd fel a színes köröket (power-up)!
     </p>
   </div>
@@ -126,13 +155,24 @@
   <div id="screen-shop" class="screen top hidden">
     <h2>SHOP</h2>
     <p>Pénz: <span class="money" data-bind="money"></span></p>
-    <h3>Fejlesztések (minden turretre)</h3>
-    <div id="shop-upgrades" class="list"></div>
+    <p class="muted">A fejlesztéseket az Upgrade menüben veheted.</p>
     <h3>Segédágyúk</h3>
     <div id="shop-drones" class="list"></div>
     <h3>Turretek</h3>
     <div id="shop-turrets" class="list"></div>
     <p class="muted">A fő ágyút és a segédágyúkat a Collectionben állítod be.</p>
+    <button data-action="menu" style="margin-top:10px">Vissza</button>
+  </div>
+
+  <!-- UPGRADE -->
+  <div id="screen-upgrade" class="screen top hidden">
+    <h2>UPGRADE</h2>
+    <p>Pénz: <span class="money" data-bind="money"></span></p>
+    <div id="upg-head" class="list"></div>
+    <h3>Fejlesztések (minden turretre hatnak)</h3>
+    <div id="upg-list" class="list"></div>
+    <h3>Segédágyúk</h3>
+    <div id="upg-drones" class="list"></div>
     <button data-action="menu" style="margin-top:10px">Vissza</button>
   </div>
 
@@ -205,7 +245,7 @@
     </div>
     <p class="muted" id="go-lb-status"></p>
     <button data-action="play" id="btn-retry">Újra</button>
-    <button data-action="shop">Shop</button>
+    <button data-action="upgrade">Upgrade</button>
     <button data-action="menu">Főmenü</button>
   </div>
 </div>
@@ -233,6 +273,7 @@ const CONFIG = {
     speed: 630,        // px/s billentyűvel
     mouseSpeed: Infinity, // px/s ennyivel követi a kurzort (Infinity = azonnal)
     zoneTop: 0.64,     // a mozgási zóna teteje (a pálya magasságának aránya)
+    touchOffsetY: 90,  // érintésnél ennyivel (logikai px) az ujj fölött áll a turret, hogy az ujj ne takarja
     startLives: 3,
   },
 
@@ -241,7 +282,8 @@ const CONFIG = {
   // Turretek (a sorrend = Shop/Collection sorrend).
   //  kind: 'projectile' (lövedék), 'laser' (folyamatos sugár, damage = sebzés/mp), 'mortar' (ívelt lövés, területi sebzés)
   //  spreadStep: fok két lövedék között (0 = párhuzamos, parallelGap px távolsággal)
-  //  pierce: hány blokkon üt át | bounces: hányszor pattan tovább | freeze / chain / spinUp / mortar: speciális hatások
+  //  pierce: hány blokkon üt át | bounces: hányszor pattan tovább | freeze / chain / spinUp / mortar / splash: speciális hatások
+  //  maxBullets: (opcionális) a lövedékek számának felső határa fejlesztéssel és power-uppal együtt
   //  unlockLevel: ennyiedik szintet kell elérni a vásárláshoz
   //  barrels: a rajz csövei (angle fok, offsetX px, tip = a cső végének színe, cap = gömb a cső végén)
   turrets: {
@@ -259,13 +301,13 @@ const CONFIG = {
     },
     twin: {
       name: 'Twin', price: 500, unlockLevel: 2, color: '#81c784', kind: 'projectile',
-      damage: 1.9, fireRate: 5, bullets: 2, spreadStep: 0, parallelGap: 24, bulletRadius: 5,
+      damage: 1.9, fireRate: 5, bullets: 2, spreadStep: 0, parallelGap: 18, bulletRadius: 5,
       barrels: [{ angle: 0, width: 11, length: 26, offsetX: -12 }, { angle: 0, width: 11, length: 26, offsetX: 12 }],
       description: 'Két párhuzamos cső, két egyenes lövés.',
     },
     spread: {
       name: 'Spread', price: 800, unlockLevel: 3, color: '#ce93d8', kind: 'projectile',
-      damage: 1.85, fireRate: 4.5, bullets: 3, spreadStep: 14, parallelGap: 0, bulletRadius: 5,
+      damage: 1.85, fireRate: 4.5, bullets: 3, spreadStep: 10, parallelGap: 0, bulletRadius: 5,
       barrels: [{ angle: -24, width: 10, length: 22 }, { angle: 0, width: 10, length: 26 }, { angle: 24, width: 10, length: 22 }],
       description: '3 lövedék legyezőben.',
     },
@@ -284,8 +326,9 @@ const CONFIG = {
     },
     sniper: {
       name: 'Sniper', price: 6000, unlockLevel: 13, color: '#b0bec5', kind: 'projectile',
-      damage: 70, fireRate: 1, bullets: 1, spreadStep: 0, parallelGap: 20, bulletRadius: 4,
+      damage: 60, fireRate: 1.1, bullets: 1, spreadStep: 0, parallelGap: 20, bulletRadius: 4,
       bulletSpeed: 1600, pierce: 999,
+      maxBullets: 3,                       // a +1 lövedék és a Multi Shot legfeljebb 3 lövedékig növeli
       barrels: [{ angle: 0, width: 6, length: 46, tip: '#ffffff' }],
       description: 'Nagyon lassú, óriási sebzés, minden blokkon átüt.',
     },
@@ -317,6 +360,14 @@ const CONFIG = {
       barrels: [-9, -3, 3, 9].map((x) => ({ angle: 0, width: 4, length: 30, offsetX: x })),
       description: 'Minél tovább tüzel, annál gyorsabban lő.',
     },
+    rocket: {
+      name: 'Rocket', price: 52000, unlockLevel: 28, color: '#e57373', kind: 'projectile',
+      damage: 15, fireRate: 1.45, bullets: 1, spreadStep: 0, parallelGap: 20, bulletRadius: 7,
+      bulletSpeed: 650,
+      splash: { factor: 0.7, range: 30 },   // becsapódáskor a szomszédos blokkok a sebzés 70%-át kapják
+      barrels: [{ angle: 0, width: 12, length: 22, offsetX: -9, tip: '#ffcc80' }, { angle: 0, width: 12, length: 22, offsetX: 9, tip: '#ffcc80' }],
+      description: 'Lassan lő, a rakéta a szomszédos blokkokat is sebzi.',
+    },
     mortar: {
       name: 'Mortar', price: 65000, unlockLevel: 30, color: '#7986cb', kind: 'mortar',
       damage: 15, fireRate: 1.6, bullets: 1, spreadStep: 0, parallelGap: 0, bulletRadius: 8,
@@ -329,16 +380,25 @@ const CONFIG = {
   // Fejlesztések (minden turretre): ár = baseCost * costGrowth ^ jelenlegi szint
   upgrades: {
     damage: {
-      name: 'Sebzés', maxLevel: 50, baseCost: 40, costGrowth: 1.3, perLevel: 0.15,
+      name: 'Sebzés', maxLevel: 50, baseCost: 150, costGrowth: 1.35, perLevel: 0.15,
       describe: (lvl) => `+${Math.round(lvl * CONFIG.upgrades.damage.perLevel * 100)}% sebzés`,
+      show: (s) => (s.kind === 'laser' ? `${fmtStat(s.damage * s.fireRate)}/mp` : fmtStat(s.damage)),
     },
     fireRate: {
-      name: 'Tűzgyorsaság', maxLevel: 50, baseCost: 50, costGrowth: 1.3, perLevel: 0.08,
+      name: 'Tűzgyorsaság', maxLevel: 50, baseCost: 150, costGrowth: 1.35, perLevel: 0.08,
       describe: (lvl) => `+${Math.round(lvl * CONFIG.upgrades.fireRate.perLevel * 100)}% lövés/mp (lézernél sebzés/mp)`,
+      show: (s) => (s.kind === 'laser' ? `×${s.fireRate.toFixed(2)} sebzés/mp` : `${fmtStat(s.fireRate)} lövés/mp`),
     },
     extraBullet: {
-      name: '+1 lövedék', maxLevel: 10, baseCost: 300, costGrowth: 1.8, perLevel: 1,
+      name: '+1 lövedék', maxLevel: 10, baseCost: 500, costGrowth: 2, perLevel: 1,
       describe: (lvl) => `+${lvl} lövedék / sugár`,
+      show: (s) => `${s.bullets} ${s.kind === 'laser' ? 'sugár' : 'lövedék'}`,
+    },
+    bulletSpeed: {
+      name: 'Lövedéksebesség', maxLevel: 20, baseCost: 80, costGrowth: 1.35, perLevel: 0.05,
+      describe: (lvl) => `+${Math.round(lvl * CONFIG.upgrades.bulletSpeed.perLevel * 100)}% lövedéksebesség`,
+      // null = erre a turretre nem hat
+      show: (s) => (s.kind === 'laser' ? null : s.mortar ? `${s.mortar.flightTime.toFixed(2)} mp repülés` : `${Math.round(s.bulletSpeed)} px/mp`),
     },
   },
 
@@ -404,6 +464,15 @@ const CONFIG = {
     },
   },
 
+  // Az első szintek könnyítése (1., 2., 3., 4. szint): HP- és sebességszorzó, max blokk soronként.
+  // Utána a normál görbe jön, ezért az 5. szinttől érezhetően nehezebb.
+  earlyLevels: [
+    { hp: 0.5, speed: 0.75, maxPerRow: 2 },
+    { hp: 0.6, speed: 0.8, maxPerRow: 2 },
+    { hp: 0.75, speed: 0.87, maxPerRow: 2 },
+    { hp: 0.62, speed: 0.8, maxPerRow: 2 },
+  ],
+
   // Ereszkedési sebesség (px/s). Szintenként nő, és a szinten belül is gyorsul.
   speed: {
     base: 96,          // 1. szint eleje
@@ -427,9 +496,12 @@ const CONFIG = {
     clearBonus: (L) => Math.round(25 * L * Math.pow(1.08, L - 1)),
   },
 
-  // Folytatás: a játék a legutóbb elért ellenőrzőponttól indul (1, 6, 11, 16, ...)
+  // Folytatás: a játék egy ellenőrzőponttól indul (1, 6, 11, 16, ...), az ELŐZŐ menet eredménye alapján.
+  // checkpointsBack: ennyivel az előző menetben elért ellenőrzőpont előtt indul, hogy legyen pár szint pénzt gyűjteni.
+  // Ha rögtön az elején meghalsz, a következő menet magától visszább lép, így nem lehet beragadni.
   progress: {
     checkpointEvery: 5,
+    checkpointsBack: 1,
   },
 
   // Boss: minden N. szinten, a szint utolsó hullámaként
@@ -445,6 +517,7 @@ const CONFIG = {
 
   economy: {
     moneyPerHp: 0.5,
+    rewardExponent: 0.8, // pénz = moneyPerHp × HP^rewardExponent (1 alatt a bevétel lassabban nő, mint a HP)
   },
 
   // Online ranglista (külön Supabase-projekt; a publishable kulcs nyilvános, csak olvasni és beküldeni enged)
@@ -512,6 +585,7 @@ const Save = {
       upgrades: zeroLevels(CONFIG.upgrades),
       bestLevel: 0,
       cycleBest: 0,          // legjobb szint a legutóbbi prestige óta
+      lastReached: 0,        // az előző menetben elért szint (innen számoljuk a folytatást)
       drones: { slots: 0, left: null, right: null, upgrades: zeroLevels(CONFIG.drones.upgrades) },
       prestige: { points: 0, total: 0, count: 0, upgrades: zeroLevels(CONFIG.prestige.upgrades) },
       stats: { kills: 0, bossKills: 0, moneyEarned: 0, powerups: 0, runs: 0 },
@@ -532,6 +606,7 @@ const Save = {
     d.money = Math.max(0, Math.floor(num(raw.money)));
     d.bestLevel = num(raw.bestLevel);
     d.cycleBest = raw.cycleBest != null ? num(raw.cycleBest) : d.bestLevel;
+    d.lastReached = raw.lastReached != null ? num(raw.lastReached) : d.cycleBest;
     for (const id of Object.keys(CONFIG.turrets)) if (raw.owned && raw.owned[id]) d.owned[id] = true;
     levels(d.upgrades, raw.upgrades, CONFIG.upgrades);
     if (raw.selected && d.owned[raw.selected]) d.selected = raw.selected;
@@ -603,15 +678,17 @@ function prestigeBonus(key) {
 function getTurretStats(id, levels = Save.data.upgrades) {
   const t = CONFIG.turrets[id];
   const U = CONFIG.upgrades;
+  const speedMult = 1 + U.bulletSpeed.perLevel * (levels.bulletSpeed || 0);
   return {
     kind: t.kind,
     damage: t.damage * (1 + U.damage.perLevel * levels.damage),
     fireRate: t.fireRate * (1 + U.fireRate.perLevel * levels.fireRate),
-    bullets: t.bullets + U.extraBullet.perLevel * levels.extraBullet,
+    bullets: Math.min(t.maxBullets || Infinity, t.bullets + U.extraBullet.perLevel * levels.extraBullet),
+    maxBullets: t.maxBullets || Infinity,
     spreadStep: t.spreadStep,
     parallelGap: t.parallelGap,
     bulletRadius: t.bulletRadius || 5,
-    bulletSpeed: t.bulletSpeed || CONFIG.bullet.speed,
+    bulletSpeed: (t.bulletSpeed || CONFIG.bullet.speed) * speedMult,
     beamWidth: t.beamWidth || 6,
     color: t.color,
     fx: {
@@ -620,9 +697,10 @@ function getTurretStats(id, levels = Save.data.upgrades) {
       bounceRange: t.bounceRange || 0,
       freeze: t.freeze || null,
       chain: t.chain || null,
+      splash: t.splash || null,
     },
     spinUp: t.spinUp || null,
-    mortar: t.mortar || null,
+    mortar: t.mortar ? Object.assign({}, t.mortar, { flightTime: t.mortar.flightTime / speedMult }) : null,
   };
 }
 
@@ -630,10 +708,16 @@ function upgradeCost(cfg, lvl) {
   return Math.round(cfg.baseCost * Math.pow(cfg.costGrowth, lvl));
 }
 
+function easing(L) {
+  return CONFIG.earlyLevels[L - 1] || { hp: 1, speed: 1, maxPerRow: CONFIG.field.cols };
+}
+
 function hpScale(L) {
   const c = CONFIG.blocks.hp;
-  return (1 + c.linear * (L - 1)) * Math.pow(c.growth, L - 1);
+  return (1 + c.linear * (L - 1)) * Math.pow(c.growth, L - 1) * easing(L).hp;
 }
+
+const fmtStat = (v) => (v >= 10000 ? fmtNum(v) : String(Math.round(v * 10) / 10));
 
 function blockColor(b) {
   if (b.type) return CONFIG.blockTypes[b.type].color;
@@ -711,11 +795,12 @@ function maxStartLevel() {
   return 1 + CONFIG.prestige.upgrades.startLevel.perLevel * Save.data.prestige.upgrades.startLevel;
 }
 
-// Innen folytatódik a játék: a prestige óta elért legjobb szint előtti ellenőrzőpont
+// Innen folytatódik a játék: az előző menetben elért szint előtti ellenőrzőpont
 function continueLevel() {
   const n = CONFIG.progress.checkpointEvery;
-  const best = Save.data.cycleBest;
-  const checkpoint = best > 1 ? Math.floor((best - 1) / n) * n + 1 : 1;
+  const best = Save.data.lastReached;
+  const index = best > 1 ? Math.floor((best - 1) / n) : 0;          // a legutóbb elért ellenőrzőpont sorszáma
+  const checkpoint = Math.max(0, index - CONFIG.progress.checkpointsBack) * n + 1;
   return Math.max(checkpoint, maxStartLevel());
 }
 
@@ -808,7 +893,7 @@ function levelProgress() {
 
 function currentFallSpeed() {
   const S = CONFIG.speed;
-  const base = S.base * Math.pow(1 + S.levelGrowth, game.level - 1);
+  const base = S.base * Math.pow(1 + S.levelGrowth, game.level - 1) * easing(game.level).speed;
   return Math.min(S.max, base * (1 + S.inLevelRamp * levelProgress()));
 }
 
@@ -822,12 +907,17 @@ function rollBlockType(L) {
   return null;
 }
 
+function hpReward(hp) {
+  const E = CONFIG.economy;
+  return Math.max(1, Math.ceil(Math.pow(hp, E.rewardExponent) * E.moneyPerHp));
+}
+
 function makeBlock(x, y, size, hp, extra = {}) {
   return Object.assign({
     x, y, size,
     hp,
     maxHp: hp,
-    reward: Math.max(1, Math.ceil(hp * CONFIG.economy.moneyPerHp)),
+    reward: hpReward(hp),
     speedMult: 1,
     boss: false,
     type: null,
@@ -856,7 +946,8 @@ function spawnRow() {
   const [minN, maxN] = CONFIG.waves.blocksPerRow(L);
   const hp = CONFIG.blocks.hp;
   const scale = hpScale(L);
-  const n = randInt(Math.min(minN, cols), Math.min(maxN, cols));
+  const cap = Math.min(cols, easing(L).maxPerRow || cols);
+  const n = randInt(Math.min(minN, cap), Math.min(maxN, cap));
 
   const order = [...Array(cols).keys()];
   for (let i = order.length - 1; i > 0; i--) {
@@ -884,7 +975,7 @@ function spawnBoss() {
     const b = makeBlock(col * CELL + PAD, HUD_H - B.sizeCells * CELL + PAD, size, hp, {
       boss: true,
       speedMult: B.speedMult,
-      reward: Math.ceil(hp * CONFIG.economy.moneyPerHp * B.rewardMult),
+      reward: Math.ceil(hpReward(hp) * B.rewardMult),
     });
     if (overlapsAny(b)) continue;
     game.blocks.push(b);
@@ -1020,12 +1111,19 @@ function hitBlock(b, dmg, fx, showEffect, opts) {
       game.effects.push({ type: 'line', x1: from.x, y1: from.y, x2: to.x, y2: to.y, t: 0.12, max: 0.12, color: '#fff59d' });
     }
   }
+  // Területi sebzés: Rocket és/vagy Explosion power-up (a nagyobbik érték számít)
+  let factor = 0, range = 0;
+  if (fx && fx.splash) { factor = fx.splash.factor; range = fx.splash.range; }
   if (isActive('explosion')) {
     const E = CONFIG.powerups.types.explosion;
+    factor = Math.max(factor, E.splashFactor);
+    range = Math.max(range, E.range);
+  }
+  if (factor > 0) {
     for (const o of game.blocks) {
-      if (o !== b && !o.dead && rectsOverlap(b, o, E.range)) damageBlock(o, dmg * E.splashFactor, opts);
+      if (o !== b && !o.dead && rectsOverlap(b, o, range)) damageBlock(o, dmg * factor, opts);
     }
-    if (showEffect) game.effects.push({ type: 'rect', x: b.x - E.range, y: b.y - E.range, size: b.size + E.range * 2, t: 0.18, max: 0.18, color: '255,138,101' });
+    if (showEffect) game.effects.push({ type: 'rect', x: b.x - range, y: b.y - range, size: b.size + range * 2, t: 0.18, max: 0.18, color: '255,138,101' });
   }
 }
 
@@ -1037,7 +1135,7 @@ function gunStats(g) {
   s.fireRate *= g.rateMult * (1 + prestigeBonus('fireRate'));
   if (isActive('doubleDamage')) s.damage *= P.doubleDamage.damageMult;
   if (isActive('rapidFire')) s.fireRate *= P.rapidFire.fireRateMult;
-  if (isActive('multiShot') && (!g.drone || CONFIG.drones.extraBullets)) s.bullets += P.multiShot.extraBullets;
+  if (isActive('multiShot') && (!g.drone || CONFIG.drones.extraBullets)) s.bullets = Math.min(s.maxBullets, s.bullets + P.multiShot.extraBullets);
   if (s.spinUp) s.fireRate *= 1 + (s.spinUp.maxMult - 1) * g.spin;
   return s;
 }
@@ -1179,6 +1277,7 @@ function loseLife(n) {
 
 function gameOver() {
   recordLevel(game.level);
+  Save.data.lastReached = game.level;
   checkAchievements();
   Save.write();
   setState('over');
@@ -1236,7 +1335,7 @@ function update(dt) {
       recordLevel(L + 1);
       Save.write();
       game.levelClearTimer = CONFIG.timing.levelClearDelay;
-      game.banner = { text: 'SZINT TELJESÍTVE', sub: `bónusz +$${fmtNum(bonus)}`, t: CONFIG.timing.levelClearDelay };
+      game.banner = { text: `LEVEL ${L} COMPLETE`, sub: `bónusz +$${fmtNum(bonus)}`, t: CONFIG.timing.levelClearDelay };
     }
     game.levelClearTimer -= dt;
     if (game.levelClearTimer <= 0) startLevelRun(L + 1);
@@ -1495,13 +1594,13 @@ function drawHud() {
 
   ctx.textAlign = 'center';
   ctx.fillStyle = '#ffd54f';
-  ctx.fillText(`SZINT ${game.level}${isBossLevel(game.level) ? ' ☠' : ''}`, W / 2 + 10, HUD_H / 2);
+  ctx.fillText(`SZINT ${game.level}${isBossLevel(game.level) ? ' ☠' : ''}`, W / 2 - 10, HUD_H / 2);
 
   ctx.textAlign = 'right';
   ctx.fillStyle = '#ef5350';
   ctx.font = `bold ${game.maxLives > 3 ? 14 : 18}px ${FONT}`;
   const hearts = game.maxLives > 5 ? `♥×${game.lives}` : '♥'.repeat(game.lives) + '♡'.repeat(Math.max(0, game.maxLives - game.lives));
-  ctx.fillText(hearts, W - 10, HUD_H / 2);
+  ctx.fillText(hearts, W - 50, HUD_H / 2);
 
   ctx.fillStyle = '#ffd54f';
   ctx.fillRect(0, HUD_H - 2, W * levelProgress(), 2);
@@ -1664,6 +1763,7 @@ async function renderLeaderboard() {
 const screens = {
   menu: document.getElementById('screen-menu'),
   shop: document.getElementById('screen-shop'),
+  upgrade: document.getElementById('screen-upgrade'),
   collection: document.getElementById('screen-collection'),
   prestige: document.getElementById('screen-prestige'),
   achievements: document.getElementById('screen-achievements'),
@@ -1675,6 +1775,7 @@ const screens = {
 const RENDERERS = {
   menu: renderMenu,
   shop: renderShop,
+  upgrade: renderUpgrade,
   collection: renderCollection,
   prestige: renderPrestige,
   achievements: renderAchievements,
@@ -1685,6 +1786,7 @@ const RENDERERS = {
 function setState(state) {
   game.state = state;
   for (const [name, el] of Object.entries(screens)) el.classList.toggle('hidden', name !== state);
+  document.getElementById('pause-btn').classList.toggle('hidden', state !== 'playing');
   if (RENDERERS[state]) RENDERERS[state]();
   refreshBindings();
 }
@@ -1752,12 +1854,9 @@ function renderMenu() {
 }
 
 function renderShop() {
-  const uWrap = document.getElementById('shop-upgrades');
   const dWrap = document.getElementById('shop-drones');
   const tWrap = document.getElementById('shop-turrets');
-  uWrap.innerHTML = dWrap.innerHTML = tWrap.innerHTML = '';
-
-  for (const id of Object.keys(CONFIG.upgrades)) uWrap.appendChild(upgradeCard(CONFIG.upgrades[id], Save.data.upgrades, id));
+  dWrap.innerHTML = tWrap.innerHTML = '';
 
   // Segédágyúk
   const D = Save.data.drones;
@@ -1781,9 +1880,8 @@ function renderShop() {
           rerender();
         })));
   } else {
-    dWrap.appendChild(makeCard('<div class="info"><div class="name">Mindkét segédágyú megvan</div><div class="desc">A típusukat a Collectionben állítod.</div></div>'));
+    dWrap.appendChild(makeCard('<div class="info"><div class="name">Mindkét segédágyú megvan</div><div class="desc">A típusukat a Collectionben, a fejlesztésüket az Upgrade menüben állítod.</div></div>'));
   }
-  if (D.slots > 0) for (const id of Object.keys(DC.upgrades)) dWrap.appendChild(upgradeCard(DC.upgrades[id], D.upgrades, id));
 
   // Turretek
   for (const [id, t] of Object.entries(CONFIG.turrets)) {
@@ -1812,6 +1910,63 @@ function renderShop() {
   }
 }
 
+function turretPreview(id, size, dim) {
+  const t = CONFIG.turrets[id];
+  const cv = document.createElement('canvas');
+  cv.width = size; cv.height = size;
+  const c = cv.getContext('2d');
+  c.scale(size / 80, size / 80);
+  drawTurret(c, 40, 46, CELL - PAD * 2, CONFIG.player.height, dim ? Object.assign({}, t, { color: '#3a4157' }) : t);
+  return cv;
+}
+
+// Upgrade menü: a kiválasztott turret értékei (jelenlegi -> következő), ár, max szint
+function renderUpgrade() {
+  const id = Save.data.selected;
+  const t = CONFIG.turrets[id];
+  const head = document.getElementById('upg-head');
+  const list = document.getElementById('upg-list');
+  const drones = document.getElementById('upg-drones');
+  head.innerHTML = list.innerHTML = drones.innerHTML = '';
+
+  const card = makeCard(`<div class="info"><div class="name">${t.name}</div><div class="desc">${t.description}</div><div class="desc">Másik turret:</div></div>`, null, 'upg-head');
+  card.insertBefore(turretPreview(id, 108), card.firstChild);
+  const sw = document.createElement('div');
+  sw.className = 'turret-switch';
+  for (const tid of Object.keys(CONFIG.turrets)) {
+    if (!Save.data.owned[tid]) continue;
+    sw.appendChild(makeButton(CONFIG.turrets[tid].name, false, () => { Save.data.selected = tid; Save.write(); rerender(); }, tid === id ? 'on' : ''));
+  }
+  card.querySelector('.info').appendChild(sw);
+  head.appendChild(card);
+
+  const lv = Save.data.upgrades;
+  for (const [uid, u] of Object.entries(CONFIG.upgrades)) {
+    const lvl = lv[uid];
+    const maxed = lvl >= u.maxLevel;
+    const cost = upgradeCost(u, lvl);
+    const now = u.show(getTurretStats(id, lv));
+    const next = u.show(getTurretStats(id, Object.assign({}, lv, { [uid]: lvl + 1 })));
+    const value = now === null ? 'Erre a turretre nem hat' : maxed ? `${now} (MAX)` : `${now} → ${next}`;
+    list.appendChild(makeCard(`
+        <div class="info">
+          <div class="name">${u.name} <span class="muted">${lvl}/${u.maxLevel}</span></div>
+          <div class="desc">${value}</div>
+        </div>`,
+      makeButton(maxed ? 'MAX' : `$${fmtNum(cost)}`, maxed || Save.data.money < cost, () => {
+        if (maxed || Save.data.money < cost) return;
+        Save.data.money -= cost;
+        lv[uid]++;
+        Save.write();
+        rerender();
+      })));
+  }
+
+  const D = Save.data.drones;
+  if (D.slots > 0) for (const did of Object.keys(CONFIG.drones.upgrades)) drones.appendChild(upgradeCard(CONFIG.drones.upgrades[did], D.upgrades, did));
+  else drones.appendChild(makeCard(`<div class="info"><div class="desc">Segédágyút a Shopban vehetsz (a ${CONFIG.drones.unlockLevel}. szinttől).</div></div>`));
+}
+
 function turretStatLines(id) {
   const t = CONFIG.turrets[id];
   const s = getTurretStats(id, zeroLevels(CONFIG.upgrades));
@@ -1823,6 +1978,7 @@ function turretStatLines(id) {
   if (s.fx.freeze) lines.push(`Lassít: ${s.fx.freeze.duration} mp`);
   if (s.fx.chain) lines.push(`Villám: +${s.fx.chain.jumps} blokk`);
   if (s.spinUp) lines.push(`Felpörög: max ${s.spinUp.maxMult}×`);
+  if (s.fx.splash) lines.push('Robban: szomszédokra is');
   if (s.mortar) lines.push(`Terület: ${s.mortar.areaCells}×${s.mortar.areaCells}`);
   return lines;
 }
@@ -1839,12 +1995,7 @@ function renderCollection() {
     const card = document.createElement('div');
     card.className = 'tcard' + (isMain ? ' selected' : '') + (owned ? '' : ' locked');
 
-    const cv = document.createElement('canvas');
-    cv.width = 120; cv.height = 120;
-    const c = cv.getContext('2d');
-    c.scale(1.5, 1.5);
-    drawTurret(c, 40, 46, CELL - PAD * 2, CONFIG.player.height, owned ? t : Object.assign({}, t, { color: '#3a4157' }));
-    card.appendChild(cv);
+    card.appendChild(turretPreview(id, 120, !owned));
 
     const name = document.createElement('div');
     name.className = 'name';
@@ -1937,6 +2088,7 @@ function doPrestige() {
   Save.data.upgrades = zeroLevels(CONFIG.upgrades);
   Save.data.drones.upgrades = zeroLevels(CONFIG.drones.upgrades);
   Save.data.cycleBest = 0;
+  Save.data.lastReached = 0;
   Save.write();
   showToast(`Prestige! +${gain} pont`);
   checkAchievements();
@@ -1981,6 +2133,8 @@ const actions = {
   play: () => startGame(continueLevel()),
   playFromStart: () => startGame(1),
   shop: () => setState('shop'),
+  upgrade: () => setState('upgrade'),
+  pause: () => { if (game.state === 'playing') { Save.write(); setState('paused'); } },
   collection: () => setState('collection'),
   prestige: () => setState('prestige'),
   achievements: () => setState('achievements'),
@@ -2046,11 +2200,38 @@ window.addEventListener('blur', () => {
   if (game.state === 'playing') { Save.write(); setState('paused'); }
 });
 
-canvas.addEventListener('mousemove', (e) => {
+function canvasPos(e) {
   const r = canvas.getBoundingClientRect();
-  input.mouse.x = (e.clientX - r.left) * (W / r.width);
-  input.mouse.y = (e.clientY - r.top) * (H / r.height);
+  return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) };
+}
+// Egér: a turret a kurzort követi. Érintés: húzással mozog, kicsit az ujj fölött.
+function followPointer(e) {
+  const pos = canvasPos(e);
+  input.mouse.x = pos.x;
+  input.mouse.y = e.pointerType === 'mouse' ? pos.y : pos.y - CONFIG.player.touchOffsetY;
   input.useMouse = true;
+}
+canvas.addEventListener('pointerdown', (e) => {
+  if (e.pointerType === 'mouse') return;
+  e.preventDefault();
+  input.touchId = e.pointerId;
+  try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* nem támogatott */ }
+  followPointer(e);
+});
+canvas.addEventListener('pointermove', (e) => {
+  if (e.pointerType !== 'mouse' && e.pointerId !== input.touchId) return;
+  followPointer(e);
+});
+const endTouch = (e) => {
+  if (e.pointerId !== input.touchId) return;
+  input.touchId = null;
+  input.useMouse = false;          // elengedéskor a turret ott marad, ahol van
+};
+canvas.addEventListener('pointerup', endTouch);
+canvas.addEventListener('pointercancel', endTouch);
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && game.state === 'playing') { Save.write(); setState('paused'); }
 });
 
 window.addEventListener('beforeunload', () => Save.write());
@@ -2069,8 +2250,10 @@ function fit() {
   canvas.width = Math.round(cssW * dpr);
   canvas.height = Math.round(cssH * dpr);
   renderScale = canvas.width / W;
+  document.getElementById('pause-btn').style.fontSize = `${Math.round(20 * scale)}px`;
 }
 window.addEventListener('resize', fit);
+window.addEventListener('orientationchange', () => setTimeout(fit, 200));
 fit();
 
 let last = performance.now();
