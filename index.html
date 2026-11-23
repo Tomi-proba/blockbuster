@@ -100,6 +100,8 @@
   .tcard .stats { font-size: 11px; color: #aeb6cc; line-height: 1.4; }
   .tcard .roles { display: flex; gap: 4px; }
   .tcard .status { font-size: 11px; color: #7a8299; }
+  .buy { display: flex; flex-direction: column; gap: 4px; flex: none; min-width: 84px; }
+  .buy button { width: 100%; }
   .bar { height: 4px; background: #1d2333; margin-top: 4px; }
   .bar span { display: block; height: 100%; background: #ffd54f; }
   #achievement-list h3 { margin: 10px 0 0; text-align: left; }
@@ -1967,24 +1969,60 @@ function makeCard(html, button, extraClass = '') {
   return card;
 }
 
-// Pénzből vehető fejlesztés kártyája (fő és segédágyú fejlesztésekhez)
+// Pénztárcák a vásárló gombokhoz
+const MONEY = { get: () => Save.data.money, take: (x) => { Save.data.money -= x; }, fmt: (x) => `$${fmtNum(x)}` };
+const POINTS = { get: () => Save.data.prestige.points, take: (x) => { Save.data.prestige.points -= x; }, fmt: (x) => `${x} pont` };
+
+// Hány szint vehető meg egyszerre a rendelkezésre álló összegből, és mennyiért
+function affordable(costOf, lvl, maxLevel, budget) {
+  let n = 0, total = 0;
+  while (lvl + n < maxLevel) {
+    const c = costOf(lvl + n);
+    if (total + c > budget) break;
+    total += c;
+    n++;
+  }
+  return { n, total };
+}
+
+// Vásárló gombok: egy szint, és "Max": annyi szint, amennyi a pénzből / pontból kijön
+function buyButtons(costOf, levels, id, maxLevel, wallet, onBought) {
+  const box = document.createElement('div');
+  box.className = 'buy';
+  const lvl = levels[id];
+  if (lvl >= maxLevel) { box.appendChild(makeButton('MAX', true)); return box; }
+  const buy = (n, total) => {
+    if (n < 1 || wallet.get() < total) return;
+    wallet.take(total);
+    levels[id] += n;
+    if (onBought) onBought(n);
+    Save.write();
+    rerender();
+  };
+  const cost = costOf(lvl);
+  box.appendChild(makeButton(wallet.fmt(cost), wallet.get() < cost, () => buy(1, costOf(levels[id]))));
+  const a = affordable(costOf, lvl, maxLevel, wallet.get());
+  const maxBtn = makeButton(a.n > 0 ? `Max ×${a.n}` : 'Max', a.n < 1, () => {
+    const now = affordable(costOf, levels[id], maxLevel, wallet.get());
+    buy(now.n, now.total);
+  });
+  if (a.n > 0) maxBtn.title = `${a.n} szint összesen ${wallet.fmt(a.total)}`;
+  box.appendChild(maxBtn);
+  return box;
+}
+
+const countUpgrades = (n) => { Save.data.stats.upgradesBought += n; };
+
+// Pénzből vehető fejlesztés kártyája (segédágyú fejlesztésekhez)
 function upgradeCard(cfg, levels, id) {
   const lvl = levels[id];
   const maxed = lvl >= cfg.maxLevel;
-  const cost = upgradeCost(cfg, lvl);
   return makeCard(`
       <div class="info">
         <div class="name">${cfg.name} <span class="muted">${lvl}/${cfg.maxLevel}</span></div>
         <div class="desc">${cfg.describe(lvl)}${maxed ? '' : ` → ${cfg.describe(lvl + 1)}`}</div>
       </div>`,
-    makeButton(maxed ? 'MAX' : `$${fmtNum(cost)}`, maxed || Save.data.money < cost, () => {
-      if (maxed || Save.data.money < cost) return;
-      Save.data.money -= cost;
-      levels[id]++;
-      Save.data.stats.upgradesBought++;
-      Save.write();
-      rerender();
-    }));
+    buyButtons((l) => upgradeCost(cfg, l), levels, id, cfg.maxLevel, MONEY, countUpgrades));
 }
 
 function renderMenu() {
@@ -2096,14 +2134,7 @@ function renderUpgrade() {
           <div class="name">${u.name} <span class="muted">${lvl}/${u.maxLevel}</span></div>
           <div class="desc">${value}</div>
         </div>`,
-      makeButton(maxed ? 'MAX' : `$${fmtNum(cost)}`, maxed || Save.data.money < cost, () => {
-        if (maxed || Save.data.money < cost) return;
-        Save.data.money -= cost;
-        lv[uid]++;
-        Save.data.stats.upgradesBought++;
-        Save.write();
-        rerender();
-      })));
+      buyButtons((l) => upgradeCost(u, l), lv, uid, u.maxLevel, MONEY, countUpgrades)));
   }
 
   const D = Save.data.drones;
@@ -2203,13 +2234,7 @@ function renderPrestige() {
           <div class="name">${u.name} <span class="muted">${lvl}/${u.maxLevel}</span></div>
           <div class="desc">${u.describe(lvl)}${maxed ? '' : ` → ${u.describe(lvl + 1)}`}</div>
         </div>`,
-      makeButton(maxed ? 'MAX' : `${cost} pont`, maxed || s.points < cost, () => {
-        if (maxed || s.points < cost) return;
-        s.points -= cost;
-        s.upgrades[id]++;
-        Save.write();
-        rerender();
-      })));
+      buyButtons((l) => u.costBase + u.costStep * l, s.upgrades, id, u.maxLevel, POINTS)));
   }
 }
 
