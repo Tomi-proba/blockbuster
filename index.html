@@ -320,7 +320,8 @@ const CONFIG = {
     },
     laser: {
       name: 'Laser', price: 3000, unlockLevel: 10, color: '#ff4081', kind: 'laser',
-      damage: 21, fireRate: 1, bullets: 1, spreadStep: 0, parallelGap: 18, beamWidth: 6,
+      damage: 17, fireRate: 1, bullets: 1, spreadStep: 0, parallelGap: 18, beamWidth: 6,
+      maxBullets: 3,                       // legfeljebb 3 sugár
       barrels: [{ angle: 0, width: 10, length: 28, tip: '#ff4081' }],
       description: 'Folyamatos sugár, másodpercenként sebez.',
     },
@@ -390,7 +391,8 @@ const CONFIG = {
       show: (s) => (s.kind === 'laser' ? `×${s.fireRate.toFixed(2)} sebzés/mp` : `${fmtStat(s.fireRate)} lövés/mp`),
     },
     extraBullet: {
-      name: '+1 lövedék', maxLevel: 10, baseCost: 500, costGrowth: 2, perLevel: 1,
+      name: '+1 lövedék', maxLevel: 4, baseCost: 500, costGrowth: 3, perLevel: 1,   // max 4: a pálya 5 oszlop széles
+      legacyCost: (lvl) => Math.round(500 * Math.pow(2, lvl)),   // a korábbi ár: ezzel térítjük vissza a 4 fölötti szinteket
       describe: (lvl) => `+${lvl} lövedék / sugár`,
       show: (s) => `${s.bullets} ${s.kind === 'laser' ? 'sugár' : 'lövedék'}`,
     },
@@ -608,6 +610,13 @@ const Save = {
     d.cycleBest = raw.cycleBest != null ? num(raw.cycleBest) : d.bestLevel;
     d.lastReached = raw.lastReached != null ? num(raw.lastReached) : d.cycleBest;
     for (const id of Object.keys(CONFIG.turrets)) if (raw.owned && raw.owned[id]) d.owned[id] = true;
+    // Ha egy fejlesztés maximuma csökkent, a fölötte lévő szinteket pénzben visszaadjuk
+    this.refund = 0;
+    for (const [id, cfg] of Object.entries(CONFIG.upgrades)) {
+      const old = raw.upgrades ? Math.floor(num(raw.upgrades[id])) : 0;
+      for (let l = cfg.maxLevel; l < old; l++) this.refund += cfg.legacyCost ? cfg.legacyCost(l) : upgradeCost(cfg, l);
+    }
+    d.money += this.refund;
     levels(d.upgrades, raw.upgrades, CONFIG.upgrades);
     if (raw.selected && d.owned[raw.selected]) d.selected = raw.selected;
 
@@ -1947,7 +1956,10 @@ function renderUpgrade() {
     const cost = upgradeCost(u, lvl);
     const now = u.show(getTurretStats(id, lv));
     const next = u.show(getTurretStats(id, Object.assign({}, lv, { [uid]: lvl + 1 })));
-    const value = now === null ? 'Erre a turretre nem hat' : maxed ? `${now} (MAX)` : `${now} → ${next}`;
+    const value = now === null ? 'Erre a turretre nem hat'
+      : maxed ? `${now} (MAX)`
+      : now === next ? `${now} (ennél a turretnél ez a maximum)`
+      : `${now} → ${next}`;
     list.appendChild(makeCard(`
         <div class="info">
           <div class="name">${u.name} <span class="muted">${lvl}/${u.maxLevel}</span></div>
@@ -2266,6 +2278,7 @@ function loop(now) {
 }
 
 Save.load();
+if (Save.refund > 0) { Save.write(); showToast(`A +1 lövedék maximuma 4 lett: $${fmtNum(Save.refund)} visszatérítve`); }
 setState('menu');
 checkAchievements();
 requestAnimationFrame(loop);
